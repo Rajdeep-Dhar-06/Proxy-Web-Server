@@ -1,0 +1,13 @@
+# Build directories
+build/
+
+# Caches and internal tools
+.cache/
+compile_commands.json
+
+# Log files
+*.log
+proxy_test.log
+
+# IDE specific files
+.vscode/
