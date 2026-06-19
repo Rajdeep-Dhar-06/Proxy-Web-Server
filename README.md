@@ -1,13 +1,13 @@
-# High-Performance C++ Caching Proxy Server
+# C++ Caching Proxy Server
 
-A lightweight, multi-threaded Caching Proxy Server implemented in C++17. Designed to forward client HTTP requests to a target origin server, cache responses using a thread-safe Sharded LRU Cache to minimize lock contention, and prevent the "thundering herd" problem through request coalescing.
+A lightweight, multi-threaded Caching Proxy Server implemented in C++17. Designed to forward client HTTP/1.1 GET requests to a target origin server, cache responses using a thread-safe Sharded LRU Cache to minimize lock contention, and prevent the "thundering herd" problem through request coalescing.
 
 ## 🚀 Features
 
 - **Multi-threaded Execution**: Employs a custom `ThreadPool` to handle multiple incoming client connections concurrently.
 - **Low-Contention Sharded Cache**: Implements an LRU cache sharded across multiple locks to minimize thread synchronization overhead under heavy request volumes.
 - **Thundering Herd Protection**: Uses a `RequestCoalescer` with C++ promise/future signals. Multiple concurrent requests for the same URL result in only a single upstream fetch; other clients await the result and receive a coalesced response directly from the cache.
-- **Native HTTP/HTTPS Backend Fetching**: Built on top of `sockpp` for high-performance networking and `cpp-httplib` for reliable HTTP protocol parsing, including SSL support via OpenSSL.
+- **Native HTTP Backend Fetching**: Built on top of `sockpp` for high-performance networking and `cpp-httplib` for reliable HTTP protocol parsing, including SSL support via OpenSSL.
 - **Robust Integration Test Suite**: Includes a dedicated shell script testing concurrent request handling, cache hits/misses, and response validations.
 
 ---
