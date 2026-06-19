@@ -1,6 +1,7 @@
 #include "Network.hpp"
 
 #include <sockpp/tcp_acceptor.h>
+
 #include <exception>
 #define CPPHTTPLIB_OPENSSL_SUPPORT
 #include <cstdlib>
@@ -19,13 +20,19 @@ OriginInfo parse_origin(const std::string& origin) {
   OriginInfo info;
   std::string url = origin;
   const std::string prefix = "http://";
+  
+  // Strip "http://" scheme prefix
   if (url.substr(0, prefix.size()) == prefix) {
     url = url.substr(prefix.size());
   }
+  
+  // Locate and strip any trailing path component
   auto slash = url.find('/');
   if (slash != std::string::npos) {
     url = url.substr(0, slash);
   }
+  
+  // Extract custom port if specified (e.g. host:port)
   auto colon = url.find(':');
   if (colon != std::string::npos) {
     info.host = url.substr(0, colon);
@@ -46,19 +53,25 @@ void run_server(uint16_t port, ThreadPool& pool, ShardedCache& cache, const stri
   std::cout << "[NETWORK] Listening on port " << port << "\n";
 
   while (true) {
-    sockpp::tcp_socket client = acceptor.accept();  // move-only
+    sockpp::tcp_socket client = acceptor.accept();  // Move-only connection handle
     if (!client) {
       std::cerr << "[WARNING] Accept failed: " << client.last_error_str() << "\n";
       continue;
     }
-    auto ptr = std::make_shared<sockpp::tcp_socket>(std::move(client));  // copy-able + move-only
-    pool.enqueueTask([ptr, &cache, origin, &coalescer]() { handle_client(std::move(*ptr), cache, origin, coalescer); });
+    
+    // sockpp::tcp_socket is move-only, so we wrap it in a std::shared_ptr to
+    // allow copying within the thread pool task closure.
+    auto ptr = std::make_shared<sockpp::tcp_socket>(std::move(client));
+    pool.enqueueTask([ptr, &cache, origin, &coalescer]() { 
+      handle_client(std::move(*ptr), cache, origin, coalescer); 
+    });
   }
 }
 
 void handle_client(sockpp::tcp_socket client, ShardedCache& cache, const string& origin, RequestCoalescer& coalescer) {
   char buffer[8192];
 
+  // Read raw request headers from client. Capped at 8KB buffer size.
   auto read_res = client.read(buffer, sizeof(buffer) - 1);
   if (read_res <= 0) return;
   size_t bytes = static_cast<size_t>(read_res);
@@ -68,6 +81,7 @@ void handle_client(sockpp::tcp_socket client, ShardedCache& cache, const string&
     ParsedRequest req = parse_request(std::string(buffer, bytes));
     std::string url = std::string(req.host) + std::string(req.path);
 
+    // Primary cache lookup check.
     auto cached = cache.get(url);
     if (cached.has_value()) {
       std::cout << "[CACHE] HIT: " << req.method << " " << req.path << std::endl;
@@ -77,8 +91,10 @@ void handle_client(sockpp::tcp_socket client, ShardedCache& cache, const string&
       return;
     }
 
+    // Attempt to coalesce duplicate concurrent requests targeting the same URL.
     auto ticket = coalescer.start_or_join(url);
     if (ticket.is_owner) {
+      // Double check in case another request populated the cache right before we claimed ownership.
       auto double_check = cache.get(url);
       if (double_check.has_value()) {
         coalescer.complete(url, *ticket.signal);
@@ -92,16 +108,22 @@ void handle_client(sockpp::tcp_socket client, ShardedCache& cache, const string&
       try {
         OriginInfo target = parse_origin(origin);
         std::string response = fetch_from_backend(target.host, target.port, req.path);
+        
+        // Cache the newly retrieved content.
         cache.put(url, response);
         std::cout << "[CACHE] MISS: " << req.method << " " << req.path << std::endl;
         inject_cache_header(response, "X-Cache: MISS\r\n");
+        
+        // Unblock waiting sibling threads.
         coalescer.complete(url, *ticket.signal);
         client.write_n(response.data(), response.size());
       } catch (...) {
+        // Broadcast the failure to waiting threads to prevent deadlock, then rethrow.
         coalescer.fail(url, *ticket.signal, std::current_exception());
         throw;
       }
     } else {
+      // Waiter thread: block until the owner thread resolves the cache promise.
       try {
         ticket.done.get();
         auto new_cached = cache.get(url);
@@ -132,12 +154,16 @@ void handle_client(sockpp::tcp_socket client, ShardedCache& cache, const string&
 
 void inject_cache_header(std::string& response, const std::string& header) {
   auto pos = response.find("\r\n\r\n");
-  if (pos != std::string::npos) response.insert(pos + 2, header);
+  if (pos != std::string::npos) {
+    response.insert(pos + 2, header);
+  }
 }
 
 std::string fetch_from_backend(const std::string& host, int port, const std::string& path) {
+  // Use a thread-local client persistent connection to backend origin
   thread_local std::unique_ptr<httplib::Client> backend = nullptr;
-  if (!backend) {  // Configuration
+  // Configuration
+  if (!backend) {  
     backend = std::make_unique<httplib::Client>(host, port);
     backend->set_keep_alive(true);
     backend->set_connection_timeout(5, 0);
@@ -147,19 +173,20 @@ std::string fetch_from_backend(const std::string& host, int port, const std::str
     backend->enable_server_certificate_verification(false);
   }
 
-  // Fetch using httplib natively!
+  // Fetch using httplib
   auto res = backend->Get(path.c_str());
   if (!res) throw ProxyException(502, "Bad Gateway", "Backend unreachable");
   if (res->status != 200) throw ProxyException(res->status, "Upstream Error", "Failed");
+  
   std::string full_response = "HTTP/1.1 200 OK\r\n";
 
-  // Forward safe headers
+  // Forward safe headers from the origin response. Recalculated Content-Length and attached later.
   for (const auto& header : res->headers) {
     if (header.first == "Content-Length" || header.first == "Transfer-Encoding") continue;
     full_response += header.first + ": " + header.second + "\r\n";
   }
 
-  // Add exact sizes and cache markers
+  // Adding body
   full_response += "Content-Length: " + std::to_string(res->body.size()) + "\r\n\r\n";
   full_response += res->body;
 

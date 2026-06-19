@@ -28,7 +28,8 @@ add_executable(caching-proxy
     src/cache/ShardedCache.cpp
     src/network/Network.cpp
     src/network/HTTPParser.cpp
-    src/network/RequestCoaleser.cpp
+    src/network/RequestCoalescer.cpp
+    src/error/ErrorHandler.cpp
 )
 
 # Specify the include directories

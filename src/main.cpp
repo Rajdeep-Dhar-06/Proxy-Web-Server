@@ -1,18 +1,28 @@
+#include <sockpp/socket.h>
+
 #include <iostream>
 #include <regex>
-#include <sockpp/socket.h>
 #include <stdexcept>
 #include <string>
 #include <vector>
+
 #include "network/Network.hpp"
 using namespace std;
+constexpr int CACHE_CAPACITY = 1000;
+constexpr int CACHE_SHARDS = 16;
 
-bool isValidURL(const string &url) {
+unsigned compute_thread_count() {
+  unsigned hc = std::thread::hardware_concurrency();
+  if (hc == 0) hc = 4;
+  return hc * 2;
+}
+
+bool isValidURL(const string& url) {
   const regex url_regex(R"(^(http)://[a-zA-Z0-9\-\.]+\.[a-zA-Z]{2,}(/.*)?$)");
   return regex_match(url, url_regex);
 }
 
-int main(int argc, char *argv[]) {
+int main(int argc, char* argv[]) {
   sockpp::initialize();
 
   if (argc != 5) {
@@ -26,7 +36,6 @@ int main(int argc, char *argv[]) {
   string origin = "";
 
   for (size_t i = 1; i < args.size(); i++) {
-
     if (args[i] == "--port") {
       if (i + 1 >= args.size()) {
         cerr << "Error: --port requires a numeric value.\n";
@@ -39,10 +48,10 @@ int main(int argc, char *argv[]) {
           return 1;
         }
         i++;
-      } catch (const invalid_argument &e) {
+      } catch (const invalid_argument& e) {
         cerr << "Error: --port requires a valid numeric value.\n";
         return 1;
-      } catch (const out_of_range &e) {
+      } catch (const out_of_range& e) {
         cerr << "Error: Port number is too large.\n";
         return 1;
       }
@@ -71,25 +80,27 @@ int main(int argc, char *argv[]) {
     return 1;
   }
 
+  unsigned num_threads = compute_thread_count();
+
   try {
     cout << "========================================\n";
-    cout << "🚀 Starting High-Performance Caching Proxy\n";
-    cout << "📡 Listening on Port: " << port << "\n";
-    cout << "🌐 Target Origin:     " << origin << "\n";
+    cout << "Starting Proxy Server \n";
+    cout << "Listening on Port:     " << port << "\n";
+    cout << "Target Origin:         " << origin << "\n";
+    cout << "Hardware threads:      " << std::thread::hardware_concurrency() << "\n";
+    cout << "Worker pool size:      " << num_threads << "\n";
     cout << "========================================\n";
 
-    // 1000 items, spread across 16 locks for minimal contention
-    ShardedCache cache(1000, 16);
-    cout << "[SYSTEM] : Sharded LRU Cache online.\n";
+    ShardedCache cache(CACHE_CAPACITY, CACHE_SHARDS);
+    cout << "[SYSTEM] LRU cache online (" << CACHE_CAPACITY << " items / " << CACHE_SHARDS << " shards)\n";
 
-    ThreadPool pool;
+    ThreadPool pool(num_threads);
     RequestCoalescer rc;
-    cout << "[SYSTEM] : Thread Pool initialized and waiting.\n";
+    cout << "[SYSTEM] Thread pool initialized with " << num_threads << " workers\n";
 
-    // Blocks forever (or until fatal exception)
-    run_server(port, pool, cache, origin, rc);
-  } catch (const std::exception &e) {
-    cerr << "\n[FATAL ERROR] : Proxy crashed: " << e.what() << "\n";
+    run_server(port, pool, cache, origin, rc); 
+  } catch (const std::exception& e) {
+    cerr << "\n[FATAL ERROR] Proxy crashed: " << e.what() << "\n";
     return 1;
   }
   return 0;
