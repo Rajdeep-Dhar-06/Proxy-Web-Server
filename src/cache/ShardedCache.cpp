@@ -1,4 +1,4 @@
-#include "ShardedCache.hpp"
+#include "cache/ShardedCache.hpp"
 
 int ShardedCache::getShardIndex(const string& url) { 
   // Map the hash of the URL to one of the configured shard buckets
@@ -20,7 +20,7 @@ optional<string> ShardedCache::get(const string& url) {
   return shards[getShardIndex(url)]->get(url); 
 }
 
-void ShardedCache::put(const string& url, string response) { 
+void ShardedCache::put(const string& url, string response, int ttl) { 
   // Delegate the storage request to the specific shard handling this URL
-  shards[getShardIndex(url)]->put(url, std::move(response)); 
+  shards[getShardIndex(url)]->put(url, std::move(response), ttl); 
 }

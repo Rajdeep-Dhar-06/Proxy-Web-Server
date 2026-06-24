@@ -13,8 +13,10 @@
 #include <string>
 #include <unordered_map>
 #include <utility>
+#include <chrono>
 
 using namespace std;
+using timepoint = std::chrono::steady_clock::time_point;
 
 /**
  * @struct CacheNode
@@ -28,14 +30,15 @@ struct CacheNode {
   string response;         ///< Raw HTTP response value
   CacheNode *prev;         ///< Pointer to the previous node in the list
   CacheNode *next;         ///< Pointer to the next node in the list
+  timepoint expiration;    ///< Expiration Time
 
   /**
    * @brief Constructs a new CacheNode.
    * @param key The cache key (URL).
    * @param val The cache value (response payload).
    */
-  CacheNode(const string &key, string val)
-      : url(key), response(std::move(val)), prev(nullptr), next(nullptr) {}
+  CacheNode(const string &key, string val, timepoint expires_at)
+      : url(key), response(std::move(val)), prev(nullptr), next(nullptr), expiration(expires_at) {}
 };
 
 /**
@@ -112,5 +115,5 @@ public:
    * @param url The request URL key.
    * @param response The response payload to cache.
    */
-  void put(const string &url, string response);
+  void put(const string &url, string response, int ttl);
 };

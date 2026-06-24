@@ -11,7 +11,6 @@
 #include <exception>
 #include <future>
 #include <mutex>
-#include <optional>
 #include <string>
 #include <unordered_map>
 
@@ -25,8 +24,13 @@
  */
 class RequestCoalescer {
  private:
+  struct InFlightRequest {
+    std::shared_future<void> future;
+    std::promise<void> promise;
+  };
+
   std::mutex mtx;                                                       ///< Protects the in_flight map
-  std::unordered_map<std::string, std::shared_future<void>> in_flight;  ///< Maps URL to the shared completion signal
+  std::unordered_map<std::string, InFlightRequest> in_flight;           ///< Maps URL to the active in-flight request
 
  public:
   /**
@@ -39,7 +43,6 @@ class RequestCoalescer {
   struct Ticket {
     bool is_owner;                            ///< True if this thread must perform the request; False if it should wait
     std::shared_future<void> done;            ///< Future that resolves when the request finishes
-    std::optional<std::promise<void>> signal; ///< Promise signal used by the owner to notify waiters
   };
 
   /**
@@ -59,9 +62,8 @@ class RequestCoalescer {
    * Removes the key from the active registry and resolves the completion signal to unblock waiters.
    *
    * @param key The unique key representing the resource.
-   * @param signal Reference to the owner's promise signal.
    */
-  void complete(const std::string& key, std::promise<void>& signal);
+  void complete(const std::string& key);
 
   /**
    * @brief Marks a coalesced request as failed.
@@ -69,8 +71,7 @@ class RequestCoalescer {
    * Removes the key from the active registry and propagates the exception to all waiting threads.
    *
    * @param key The unique key representing the resource.
-   * @param signal Reference to the owner's promise signal.
    * @param ex Pointer to the exception that caused the failure.
    */
-  void fail(const std::string& key, std::promise<void>& signal, std::exception_ptr ex);
+  void fail(const std::string& key, std::exception_ptr ex);
 };

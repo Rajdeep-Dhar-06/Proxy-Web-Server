@@ -8,7 +8,7 @@
  */
 
 #pragma once
-#include "LRUCache.hpp"
+#include "cache/LRUCache.hpp"
 #include <functional>
 #include <memory>
 #include <vector>
@@ -24,8 +24,8 @@
 class ShardedCache {
 private:
   vector<std::unique_ptr<LRUCache>> shards;     ///< List of independent LRU cache shards
-  int num_shards;                               ///< Total number of shards configured
   hash<string> hasher;                          ///< Hash function to map keys to shards
+  int num_shards;                               ///< Total number of shards configured
 
   /**
    * @brief Helper to compute the shard index for a given URL.
@@ -54,5 +54,5 @@ public:
    * @param url The resource URL.
    * @param response The response body to cache.
    */
-  void put(const string &url, string response);
+  void put(const string &url, string response, int ttl);
 };

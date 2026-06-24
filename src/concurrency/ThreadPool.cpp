@@ -1,4 +1,4 @@
-#include "ThreadPool.hpp"
+#include "concurrency/ThreadPool.hpp"
 
 ThreadPool::ThreadPool(size_t threads) {
   stop = false;
@@ -10,7 +10,7 @@ ThreadPool::ThreadPool(size_t threads) {
 
 void ThreadPool::enqueueTask(std::function<void()> task) {
   {
-    std::unique_lock<std::mutex> lock(queueMtx);
+    std::lock_guard<std::mutex> lock(queueMtx);
     // Ignore tasks if the thread pool is in shutdown mode
     if (stop) return;
     taskQueue.push(std::move(task));
@@ -43,14 +43,17 @@ void ThreadPool::workerLoop() {
 }
 
 ThreadPool::~ThreadPool() {
-    // Set the stop flag and notify all threads to break out of their wait loops
+  // Set the stop flag and notify all threads to break out of their wait loops
+  {
+    std::lock_guard<std::mutex> lock(queueMtx);
     stop = true;
-    cv.notify_all();
-    
-    // Gracefully join and wait for all active threads to complete their execution
-    for (thread &worker : workers) {
-        if (worker.joinable()) {
-            worker.join();
-        }
+  }
+  cv.notify_all();
+
+  // Gracefully join and wait for all active threads to complete their execution
+  for (thread& worker : workers) {
+    if (worker.joinable()) {
+      worker.join();
     }
+  }
 }

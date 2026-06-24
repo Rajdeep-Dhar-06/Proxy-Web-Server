@@ -1,4 +1,4 @@
-#include "ErrorHandler.hpp"
+#include "error/ErrorHandler.hpp"
 
 ProxyException::ProxyException(int status_code, const std::string& http_message, const std::string& error_message)
     : status_code(status_code), http_message(http_message), error_message(error_message) {}

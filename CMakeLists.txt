@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.10)
-project(caching-proxy CXX)
+project(caching-proxy C CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -30,10 +30,11 @@ add_executable(caching-proxy
     src/network/HTTPParser.cpp
     src/network/RequestCoalescer.cpp
     src/error/ErrorHandler.cpp
+    src/vendor/picohttpparser.c
 )
 
 # Specify the include directories
-target_include_directories(caching-proxy PRIVATE src)
+target_include_directories(caching-proxy PRIVATE include src)
 
 # Link threads library and sockpp
 find_package(Threads REQUIRED)
