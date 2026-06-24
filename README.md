@@ -18,8 +18,6 @@ The server is built with modern systems programming patterns to ensure high thro
 
 ## Directory Layout
 
-The project follows a standard C++ directory structure (Pattern B layout) that separates header declarations under the `include` tree from source file implementations under the `src` tree:
-
 ```text
 caching-proxy/
 ├── CMakeLists.txt              # CMake build configuration
@@ -80,9 +78,6 @@ For Ubuntu/Debian/WSL:
 sudo apt update
 sudo apt install -y build-essential cmake libssl-dev
 ```
-
-*Note: The `sockpp` dependency is automatically fetched and compiled locally by CMake during configuration.*
-
 ---
 
 ## Building the Project
