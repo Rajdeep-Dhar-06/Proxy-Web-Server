@@ -1,93 +1,142 @@
 # C++ Caching Proxy Server
 
-A lightweight, multi-threaded Caching Proxy Server implemented in C++17. Designed to forward client HTTP/1.1 GET requests to a target origin server, cache responses using a thread-safe Sharded LRU Cache to minimize lock contention, and prevent the "thundering herd" problem through request coalescing.
-
-## 🚀 Features
-
-- **Multi-threaded Execution**: Employs a custom `ThreadPool` to handle multiple incoming client connections concurrently.
-- **Low-Contention Sharded Cache**: Implements an LRU cache sharded across multiple locks to minimize thread synchronization overhead under heavy request volumes.
-- **Thundering Herd Protection**: Uses a `RequestCoalescer` with C++ promise/future signals. Multiple concurrent requests for the same URL result in only a single upstream fetch; other clients await the result and receive a coalesced response directly from the cache.
-- **Native HTTP Backend Fetching**: Built on top of `sockpp` for high-performance networking and `cpp-httplib` for reliable HTTP protocol parsing, including SSL support via OpenSSL.
-- **Robust Integration Test Suite**: Includes a dedicated shell script testing concurrent request handling, cache hits/misses, and response validations.
+A high-performance, multi-threaded Caching Proxy Server implemented in C++17. This server intercepts client HTTP/1.1 requests, checks a thread-safe Sharded LRU Cache to serve cached responses immediately, coalesces concurrent requests to the same target resource to mitigate backend load, and forwards cache misses to the destination origin server.
 
 ---
 
-## 🛠️ Tech Stack & Dependencies
+## Technical Architecture
+
+The server is built with modern systems programming patterns to ensure high throughput, safety, and correctness under concurrent workloads:
+
+1. **Multi-threaded Worker Pool (ThreadPool)**: Rather than spawning a thread per TCP connection, the server pre-allocates a fixed-size worker thread pool. Connections accepted by the main thread are enqueued onto a task queue, minimizing context-switching overhead and bounding resource consumption.
+2. **Lock-Contention Mitigation (Sharded Cache)**: A single global cache requires a single mutex, making it a severe concurrency bottleneck. This implementation shards the LRU cache into 16 independent partition buckets. Requests are routed to a specific shard using the hash of their URL key, allowing concurrent threads to read and write without lock contention.
+3. **Thundering Herd Protection (Request Coalescing)**: To prevent cache stampede when multiple clients request an uncached resource at the same time, the server implements request coalescing. Using C++17 `std::promise` and `std::shared_future`, only the first request (the owner) fetches from the backend. Concurrent waiters block on the shared future, automatically resolving and serving the response from the cache once the owner finishes.
+4. **Incremental Stream Parsing (picohttpparser)**: TCP is a stream-oriented protocol where HTTP headers may arrive fragmented across network packets. The server utilizes the fast C-based `picohttpparser` in an incremental socket-reading loop to correctly handle partial packet header fragmentation.
+5. **OpenSSL/HTTPS Backend Support**: The network client natively supports fetching from secure HTTPS targets as well as standard HTTP backends by conditionally instantiating SSL-enabled clients.
+
+---
+
+## Directory Layout
+
+The project follows a standard C++ directory structure (Pattern B layout) that separates header declarations under the `include` tree from source file implementations under the `src` tree:
+
+```text
+caching-proxy/
+├── CMakeLists.txt              # CMake build configuration
+├── README.md                   # Project documentation
+├── test_proxy.sh               # Integration test script
+├── include/                    # Header declarations
+│   ├── cache/
+│   │   ├── LRUCache.hpp
+│   │   └── ShardedCache.hpp
+│   ├── concurrency/
+│   │   └── ThreadPool.hpp
+│   ├── error/
+│   │   └── ErrorHandler.hpp
+│   ├── network/
+│   │   ├── HTTPParser.hpp
+│   │   ├── Network.hpp
+│   │   └── RequestCoalescer.hpp
+│   └── vendor/
+│       ├── httplib.h
+│       └── picohttpparser.h
+└── src/                        # Source implementations
+    ├── main.cpp
+    ├── cache/
+    │   ├── LRUCache.cpp
+    │   └── ShardedCache.cpp
+    ├── concurrency/
+    │   └── ThreadPool.cpp
+    ├── error/
+    │   └── ErrorHandler.cpp
+    ├── network/
+    │   ├── HTTPParser.cpp
+    │   ├── Network.cpp
+    │   └── RequestCoalescer.cpp
+    └── vendor/
+        └── picohttpparser.c
+```
+
+---
+
+## Tech Stack & Dependencies
 
 *   **Language Standard**: C++17
 *   **Build System**: CMake (v3.10+)
 *   **Core Libraries**:
-    *   [sockpp](https://github.com/fpagliughi/sockpp): Modern C++ wrapper for BSD sockets.
-    *   [cpp-httplib](https://github.com/yhirose/cpp-httplib): Header-only C++ HTTP/HTTPS client.
-    *   [OpenSSL](https://www.openssl.org/): For SSL/TLS support for secure backend servers.
+    *   [sockpp](https://github.com/fpagliughi/sockpp): Modern C++ socket wrapper.
+    *   [cpp-httplib](https://github.com/yhirose/cpp-httplib): C++ HTTP/HTTPS client library.
+    *   [OpenSSL](https://www.openssl.org/): For SSL/TLS secure backend connections.
+    *   [picohttpparser](https://github.com/h2o/picohttpparser): High-performance HTTP parser.
 
 ---
 
-## 📦 Prerequisites
+## Prerequisites
 
-Ensure you have CMake, OpenSSL headers, and a C++17-capable compiler installed. On Ubuntu/WSL:
+To compile the codebase, ensure you have CMake, a C++17 compiler (GCC or Clang), and OpenSSL libraries installed on your machine.
 
+For Ubuntu/Debian/WSL:
 ```bash
 sudo apt update
 sudo apt install -y build-essential cmake libssl-dev
 ```
 
-*Note: `sockpp` is automatically fetched and built as part of the CMake configuration step.*
+*Note: The `sockpp` dependency is automatically fetched and compiled locally by CMake during configuration.*
 
 ---
 
-## 🔧 Building the Project
+## Building the Project
 
-Configure and build the binary using CMake:
+Configure and build the executable using CMake:
 
 ```bash
 # Configure the build directory
 cmake -B build -S .
 
-# Build the executable
+# Build the executable target
 cmake --build build
 ```
 
 ---
 
-## 🏃 Running the Proxy
+## Running the Proxy
 
-Start the proxy server by specifying a listening port and a target origin server:
+Start the proxy server by specifying a local port and the target origin backend URL:
 
 ```bash
 ./build/caching-proxy --port <port> --origin <origin_url>
 ```
 
 ### Example
-To listen on port `3000` and proxy requests to `http://dummyjson.com`:
+To run the proxy server locally on port 3000 and target `http://dummyjson.com`:
 
 ```bash
 ./build/caching-proxy --port 3000 --origin http://dummyjson.com
 ```
 
-You can then curl the proxy server directly:
+In another terminal, you can perform requests to the proxy:
 ```bash
 curl -I http://localhost:3000/products
 ```
 
-### Custom Cache Markers
-The proxy appends an `X-Cache` header to all client responses to indicate the cache status:
-- `X-Cache: MISS`: The requested resource was fetched from the origin server.
-- `X-Cache: HIT`: The resource was returned directly from the local LRU cache.
+### Cache Response Markers
+The server injects an `X-Cache` header in its responses to indicate cache state:
+*   `X-Cache: MISS`: The resource was fetched from the upstream origin.
+*   `X-Cache: HIT`: The resource was returned directly from the sharded LRU cache.
 
 ---
 
-## 🧪 Testing
+## Testing
 
-The repository contains an automated integration test script:
+An automated shell script is provided to verify correctness, including concurrent request handling and coalescing:
 
 ```bash
 ./test_proxy.sh
 ```
 
-This script will:
-1. Verify the project builds successfully.
-2. Spin up the proxy server in the background.
-3. Execute sequential GET requests to verify baseline Cache MISS and Cache HIT behavior.
-4. Fire multiple concurrent requests to the same endpoint simultaneously to validate the **Request Coalescer** (ensures only 1 request goes upstream and the remaining concurrent requests are coalesced into Cache HITs).
-5. Clean up background processes and output a colored summary.
+The test script:
+1. Validates that the project compiles successfully.
+2. Starts the proxy server in the background targeting a mockable origin.
+3. Tests cache miss and cache hit sequencing.
+4. Spawns 5 concurrent requests simultaneously to verify request coalescing (confirming only 1 request hits the backend while the remaining 4 are cleanly served as coalesced hits).
+5. Stops background processes and prints a test result report.
