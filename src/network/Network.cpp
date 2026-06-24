@@ -1,4 +1,4 @@
-#include "Network.hpp"
+#include "network/Network.hpp"
 
 #include <sockpp/tcp_acceptor.h>
 
@@ -8,41 +8,10 @@
 #include <iostream>
 #include <memory>
 
-#include "../vendor/httplib.h"
-#include "HTTPParser.hpp"
+#include "vendor/httplib.h"
+#include "network/HTTPParser.hpp"
 
-struct OriginInfo {
-  std::string host;
-  uint16_t port = 80;
-};
 
-OriginInfo parse_origin(const std::string& origin) {
-  OriginInfo info;
-  std::string url = origin;
-  const std::string prefix = "http://";
-  
-  // Strip "http://" scheme prefix
-  if (url.substr(0, prefix.size()) == prefix) {
-    url = url.substr(prefix.size());
-  }
-  
-  // Locate and strip any trailing path component
-  auto slash = url.find('/');
-  if (slash != std::string::npos) {
-    url = url.substr(0, slash);
-  }
-  
-  // Extract custom port if specified (e.g. host:port)
-  auto colon = url.find(':');
-  if (colon != std::string::npos) {
-    info.host = url.substr(0, colon);
-    info.port = static_cast<uint16_t>(std::stoi(url.substr(colon + 1)));
-  } else {
-    info.host = url;
-    info.port = 80;
-  }
-  return info;
-}
 
 void run_server(uint16_t port, ThreadPool& pool, ShardedCache& cache, const string& origin, RequestCoalescer& coalescer) {
   sockpp::tcp_acceptor acceptor(port);  // socket() -> bind() -> listen()
@@ -58,27 +27,17 @@ void run_server(uint16_t port, ThreadPool& pool, ShardedCache& cache, const stri
       std::cerr << "[WARNING] Accept failed: " << client.last_error_str() << "\n";
       continue;
     }
-    
+
     // sockpp::tcp_socket is move-only, so we wrap it in a std::shared_ptr to
     // allow copying within the thread pool task closure.
     auto ptr = std::make_shared<sockpp::tcp_socket>(std::move(client));
-    pool.enqueueTask([ptr, &cache, origin, &coalescer]() { 
-      handle_client(std::move(*ptr), cache, origin, coalescer); 
-    });
+    pool.enqueueTask([ptr, &cache, origin, &coalescer]() { handle_client(std::move(*ptr), cache, origin, coalescer); });
   }
 }
 
 void handle_client(sockpp::tcp_socket client, ShardedCache& cache, const string& origin, RequestCoalescer& coalescer) {
-  char buffer[8192];
-
-  // Read raw request headers from client. Capped at 8KB buffer size.
-  auto read_res = client.read(buffer, sizeof(buffer) - 1);
-  if (read_res <= 0) return;
-  size_t bytes = static_cast<size_t>(read_res);
-  buffer[bytes] = '\0';
-
   try {
-    ParsedRequest req = parse_request(std::string(buffer, bytes));
+    ParsedRequest req = parse_request(client);
     std::string url = std::string(req.host) + std::string(req.path);
 
     // Primary cache lookup check.
@@ -95,43 +54,45 @@ void handle_client(sockpp::tcp_socket client, ShardedCache& cache, const string&
     auto ticket = coalescer.start_or_join(url);
     if (ticket.is_owner) {
       // Double check in case another request populated the cache right before we claimed ownership.
-      auto double_check = cache.get(url);
-      if (double_check.has_value()) {
-        coalescer.complete(url, *ticket.signal);
+      auto cached = cache.get(url);
+      if (cached.has_value()) {
+        coalescer.complete(url);
         std::cout << "[CACHE] HIT: " << req.method << " " << req.path << std::endl;
-        std::string response = double_check.value();
+        std::string response = cached.value();
         inject_cache_header(response, "X-Cache: HIT\r\n");
         client.write_n(response.data(), response.size());
         return;
       }
 
       try {
-        OriginInfo target = parse_origin(origin);
-        std::string response = fetch_from_backend(target.host, target.port, req.path);
-        
-        // Cache the newly retrieved content.
-        cache.put(url, response);
+        int ttl = 60; // Default TTL of 60 seconds
+        std::string response = fetch_from_backend(origin, req.path, &ttl);
+
+        // Cache the newly retrieved content if caching is enabled (ttl > 0)
+        if (ttl > 0) {
+          cache.put(url, response, ttl);
+        }
         std::cout << "[CACHE] MISS: " << req.method << " " << req.path << std::endl;
         inject_cache_header(response, "X-Cache: MISS\r\n");
-        
+
         // Unblock waiting sibling threads.
-        coalescer.complete(url, *ticket.signal);
+        coalescer.complete(url);
         client.write_n(response.data(), response.size());
       } catch (...) {
         // Broadcast the failure to waiting threads to prevent deadlock, then rethrow.
-        coalescer.fail(url, *ticket.signal, std::current_exception());
+        coalescer.fail(url, std::current_exception());
         throw;
       }
     } else {
       // Waiter thread: block until the owner thread resolves the cache promise.
       try {
         ticket.done.get();
-        auto new_cached = cache.get(url);
-        if (!new_cached.has_value()) {
+        auto cached = cache.get(url);
+        if (!cached.has_value()) {
           throw ProxyException(500, "Internal Server Error", "Coalesced response not found in cache");
         }
         std::cout << "[CACHE] HIT (Coalesced): " << req.method << " " << req.path << std::endl;
-        std::string response = new_cached.value();
+        std::string response = cached.value();
         inject_cache_header(response, "X-Cache: HIT\r\n");
         client.write_n(response.data(), response.size());
         return;
@@ -141,6 +102,9 @@ void handle_client(sockpp::tcp_socket client, ShardedCache& cache, const string&
         throw ProxyException(502, "Bad Gateway", "Upstream request failed or owner thread crashed: " + std::string(e.what()));
       }
     }
+  } catch (const SocketClosedException&) {
+    // Silent return when the client socket is closed or read fails
+    return;
   } catch (const ProxyException& e) {
     std::cerr << "[PROXY ERROR] " << e.what() << "\n";
     std::string err_resp = ProxyException::generate_http_response(e.get_status_code(), e.get_http_message());
@@ -159,12 +123,12 @@ void inject_cache_header(std::string& response, const std::string& header) {
   }
 }
 
-std::string fetch_from_backend(const std::string& host, int port, const std::string& path) {
-  // Use a thread-local client persistent connection to backend origin
+std::string fetch_from_backend(const std::string& origin, const std::string& path, int* ttl) {
+  // thread-local client persistent connection to backend origin
   thread_local std::unique_ptr<httplib::Client> backend = nullptr;
   // Configuration
-  if (!backend) {  
-    backend = std::make_unique<httplib::Client>(host, port);
+  if (!backend) {
+    backend = std::make_unique<httplib::Client>(origin);
     backend->set_keep_alive(true);
     backend->set_connection_timeout(5, 0);
     backend->set_read_timeout(10, 0);
@@ -177,7 +141,32 @@ std::string fetch_from_backend(const std::string& host, int port, const std::str
   auto res = backend->Get(path.c_str());
   if (!res) throw ProxyException(502, "Bad Gateway", "Backend unreachable");
   if (res->status != 200) throw ProxyException(res->status, "Upstream Error", "Failed");
-  
+
+  *ttl = 60; // default value
+  if (res->has_header("Cache-Control")) {
+    std::string cache_control = res->get_header_value("Cache-Control");
+
+    if (cache_control.find("no-store") != std::string::npos ||
+        cache_control.find("no-cache") != std::string::npos ||
+        cache_control.find("private") != std::string::npos) {
+      *ttl = 60; // Temporary caching of 60s
+    } else {
+      size_t pos = cache_control.find("max-age=");
+      if (pos != std::string::npos) {
+        std::string num_str = cache_control.substr(pos + 8);
+        size_t comma_pos = num_str.find(',');
+        if (comma_pos != std::string::npos) {
+          num_str = num_str.substr(0, comma_pos);
+        }
+        try {
+          *ttl = std::stoi(num_str);
+        } catch (...) {
+          *ttl = 60;  
+        }
+      }
+    }
+  }
+
   std::string full_response = "HTTP/1.1 200 OK\r\n";
 
   // Forward safe headers from the origin response. Recalculated Content-Length and attached later.

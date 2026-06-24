@@ -18,7 +18,7 @@ unsigned compute_thread_count() {
 }
 
 bool isValidURL(const string& url) {
-  const regex url_regex(R"(^(http)://[a-zA-Z0-9\-\.]+\.[a-zA-Z]{2,}(/.*)?$)");
+  const regex url_regex(R"(^(https?)://[a-zA-Z0-9\-\.]+\.[a-zA-Z]{2,}(/.*)?$)");
   return regex_match(url, url_regex);
 }
 
@@ -64,7 +64,7 @@ int main(int argc, char* argv[]) {
       origin = args[i + 1];
 
       if (!isValidURL(origin)) {
-        cerr << "Error: Invalid origin URL. Must start with http://\n";
+        cerr << "Error: Invalid origin URL. Must start with http:// or https://\n";
         return 1;
       }
       i++;
@@ -95,10 +95,10 @@ int main(int argc, char* argv[]) {
     cout << "[SYSTEM] LRU cache online (" << CACHE_CAPACITY << " items / " << CACHE_SHARDS << " shards)\n";
 
     ThreadPool pool(num_threads);
-    RequestCoalescer rc;
+    RequestCoalescer request_coalescer;
     cout << "[SYSTEM] Thread pool initialized with " << num_threads << " workers\n";
 
-    run_server(port, pool, cache, origin, rc); 
+    run_server(port, pool, cache, origin, request_coalescer); 
   } catch (const std::exception& e) {
     cerr << "\n[FATAL ERROR] Proxy crashed: " << e.what() << "\n";
     return 1;

@@ -12,10 +12,10 @@
 #include <cstdint>
 #include <string>
 
-#include "../cache/ShardedCache.hpp"
-#include "../concurrency/ThreadPool.hpp"
-#include "../error/ErrorHandler.hpp"
-#include "RequestCoalescer.hpp"
+#include "cache/ShardedCache.hpp"
+#include "concurrency/ThreadPool.hpp"
+#include "error/ErrorHandler.hpp"
+#include "network/RequestCoalescer.hpp"
 
 using namespace std;
 
@@ -63,10 +63,9 @@ void inject_cache_header(std::string& response, const std::string& header);
  * Leverages thread-local client connections to query the backend origin, sanitizes headers
  * that might break cache serialization, and constructs a clean HTTP/1.1 response string.
  *
- * @param host The hostname/IP of the origin server.
- * @param port The port of the origin server.
+ * @param origin The full origin server base URL.
  * @param path The path of the resource.
  * @return std::string The fully constructed HTTP/1.1 response from the backend.
  * @throws ProxyException on network issues or non-200 responses.
  */
-std::string fetch_from_backend(const std::string& host, int port, const std::string& path);
+std::string fetch_from_backend(const std::string& origin, const std::string& path, int* ttl);
