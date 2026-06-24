@@ -16,7 +16,6 @@
 #include <thread>
 #include <vector>
 
-using namespace std;
 
 /**
  * @class ThreadPool
@@ -27,8 +26,8 @@ using namespace std;
  */
 class ThreadPool {
 private:
-  vector<thread> workers;                  ///< Active worker threads in the pool
-  queue<std::function<void()>> taskQueue;  ///< Thread-safe FIFO queue of pending tasks
+  std::vector<std::thread> workers;        ///< Active worker threads in the pool
+  std::queue<std::function<void()>> taskQueue;  ///< Thread-safe FIFO queue of pending tasks
   std::mutex queueMtx;                     ///< Mutex protecting the taskQueue and stop state
   std::condition_variable cv;              ///< Condition variable to notify workers of new tasks
   std::atomic<bool> stop;                  ///< Flag signaling workers to stop and exit

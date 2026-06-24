@@ -48,8 +48,8 @@ CacheNode* LRUCache::removeTail() {
   return tailNode;
 }
 
-optional<string> LRUCache::get(const string& url) {
-  lock_guard<mutex> lock(cacheMutex);
+std::optional<std::string> LRUCache::get(const std::string& url) {
+  std::lock_guard<std::mutex> lock(cacheMutex);
   auto it = cacheMap.find(url);
   if (it != cacheMap.end()) {
     CacheNode* foundNode = it->second;
@@ -65,11 +65,11 @@ optional<string> LRUCache::get(const string& url) {
     moveToHead(foundNode);  // Access promotes the node to MRU status
     return foundNode->response;
   }
-  return nullopt;
+  return std::nullopt;
 }
 
-void LRUCache::put(const string& url, string response, int ttl) {
-  lock_guard<mutex> lock(cacheMutex);
+void LRUCache::put(const std::string& url, std::string response, int ttl) {
+  std::lock_guard<std::mutex> lock(cacheMutex);
   auto now = std::chrono::steady_clock::now();
   auto expires_at = now + std::chrono::seconds(ttl);
 

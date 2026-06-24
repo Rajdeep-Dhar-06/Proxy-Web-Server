@@ -51,7 +51,7 @@ ThreadPool::~ThreadPool() {
   cv.notify_all();
 
   // Gracefully join and wait for all active threads to complete their execution
-  for (thread& worker : workers) {
+  for (std::thread& worker : workers) {
     if (worker.joinable()) {
       worker.join();
     }

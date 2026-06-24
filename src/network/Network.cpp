@@ -11,9 +11,7 @@
 #include "vendor/httplib.h"
 #include "network/HTTPParser.hpp"
 
-
-
-void run_server(uint16_t port, ThreadPool& pool, ShardedCache& cache, const string& origin, RequestCoalescer& coalescer) {
+void run_server(uint16_t port, ThreadPool& pool, ShardedCache& cache, const std::string& origin, RequestCoalescer& coalescer) {
   sockpp::tcp_acceptor acceptor(port);  // socket() -> bind() -> listen()
   if (!acceptor) {
     std::cerr << "[ERROR] Failed to bind to port " << port << ": " << acceptor.last_error_str() << "\n";
@@ -35,7 +33,7 @@ void run_server(uint16_t port, ThreadPool& pool, ShardedCache& cache, const stri
   }
 }
 
-void handle_client(sockpp::tcp_socket client, ShardedCache& cache, const string& origin, RequestCoalescer& coalescer) {
+void handle_client(sockpp::tcp_socket client, ShardedCache& cache, const std::string& origin, RequestCoalescer& coalescer) {
   try {
     ParsedRequest req = parse_request(client);
     std::string url = std::string(req.host) + std::string(req.path);

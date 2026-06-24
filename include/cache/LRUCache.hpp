@@ -15,7 +15,6 @@
 #include <utility>
 #include <chrono>
 
-using namespace std;
 using timepoint = std::chrono::steady_clock::time_point;
 
 /**
@@ -26,8 +25,8 @@ using timepoint = std::chrono::steady_clock::time_point;
  * the key, the raw HTTP response as the value, and pointers to adjacent nodes.
  */
 struct CacheNode {
-  string url;              ///< Cached URL key
-  string response;         ///< Raw HTTP response value
+  std::string url;         ///< Cached URL key
+  std::string response;    ///< Raw HTTP response value
   CacheNode *prev;         ///< Pointer to the previous node in the list
   CacheNode *next;         ///< Pointer to the next node in the list
   timepoint expiration;    ///< Expiration Time
@@ -37,7 +36,7 @@ struct CacheNode {
    * @param key The cache key (URL).
    * @param val The cache value (response payload).
    */
-  CacheNode(const string &key, string val, timepoint expires_at)
+  CacheNode(const std::string &key, std::string val, timepoint expires_at)
       : url(key), response(std::move(val)), prev(nullptr), next(nullptr), expiration(expires_at) {}
 };
 
@@ -55,8 +54,8 @@ private:
   int size;                                     ///< Current number of entries in the cache
   CacheNode *head;                              ///< Dummy head node of the doubly linked list
   CacheNode *tail;                              ///< Dummy tail node of the doubly linked list
-  unordered_map<string, CacheNode *> cacheMap;  ///< Map for fast O(1) node lookups by URL
-  mutex cacheMutex;                             ///< Mutex for thread-safe synchronization
+  std::unordered_map<std::string, CacheNode *> cacheMap;  ///< Map for fast O(1) node lookups by URL
+  std::mutex cacheMutex;                             ///< Mutex for thread-safe synchronization
 
   /**
    * @brief Promotes a node to the head of the doubly linked list (most recently used).
@@ -103,7 +102,7 @@ public:
    * @param url The request URL key.
    * @return std::optional<string> The cached response if found, else std::nullopt.
    */
-  optional<string> get(const string &url);
+  std::optional<std::string> get(const std::string &url);
 
   /**
    * @brief Stores a response in the cache.
@@ -115,5 +114,5 @@ public:
    * @param url The request URL key.
    * @param response The response payload to cache.
    */
-  void put(const string &url, string response, int ttl);
+  void put(const std::string &url, std::string response, int ttl);
 };

@@ -23,8 +23,8 @@
  */
 class ShardedCache {
 private:
-  vector<std::unique_ptr<LRUCache>> shards;     ///< List of independent LRU cache shards
-  hash<string> hasher;                          ///< Hash function to map keys to shards
+  std::vector<std::unique_ptr<LRUCache>> shards;     ///< List of independent LRU cache shards
+  std::hash<std::string> hasher;                          ///< Hash function to map keys to shards
   int num_shards;                               ///< Total number of shards configured
 
   /**
@@ -32,7 +32,7 @@ private:
    * @param url The resource URL string.
    * @return int The index of the shard in the shards array.
    */
-  int getShardIndex(const string &url);
+  int getShardIndex(const std::string &url);
 
 public:
   /**
@@ -47,12 +47,12 @@ public:
    * @param url The resource URL.
    * @return std::optional<string> The cached response if found, else std::nullopt.
    */
-  optional<string> get(const string &url);
+  std::optional<std::string> get(const std::string &url);
 
   /**
    * @brief Stores a response in the appropriate cache shard.
    * @param url The resource URL.
    * @param response The response body to cache.
    */
-  void put(const string &url, string response, int ttl);
+  void put(const std::string &url, std::string response, int ttl);
 };

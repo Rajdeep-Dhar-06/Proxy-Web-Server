@@ -17,7 +17,6 @@
 #include "error/ErrorHandler.hpp"
 #include "network/RequestCoalescer.hpp"
 
-using namespace std;
 
 /**
  * @brief Starts the primary TCP server socket acceptor loop.
