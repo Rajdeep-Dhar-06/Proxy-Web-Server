@@ -114,5 +114,5 @@ public:
    * @param url The request URL key.
    * @param response The response payload to cache.
    */
-  void put(const std::string &url, std::string response, int ttl);
+  void put(const std::string &url, std::string response, int ttl = 3600);
 };

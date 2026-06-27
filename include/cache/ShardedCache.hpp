@@ -54,5 +54,5 @@ public:
    * @param url The resource URL.
    * @param response The response body to cache.
    */
-  void put(const std::string &url, std::string response, int ttl);
+  void put(const std::string &url, std::string response, int ttl = 3600);
 };
