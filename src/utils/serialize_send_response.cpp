@@ -1,7 +1,7 @@
-#include "network/HttpContext.hpp"
-#include "network/HTTPParser.hpp"
+#include "utils/serialize_send_response.hpp"
+#include "vendor/picohttpparser.h"
 #include <sockpp/tcp_socket.h>
-#include <string>
+#include <stdexcept>
 
 std::string get_status_message(int status_code) {
     switch (status_code) {
@@ -14,10 +14,6 @@ std::string get_status_message(int status_code) {
         case 502: return "Bad Gateway";
         default: return "OK";
     }
-}
-
-void read_and_parse_request(HttpContext& ctx) {
-    ctx.request = parse_request(ctx.socket);
 }
 
 std::string serialize_response(HttpContext& ctx) {
@@ -51,9 +47,26 @@ void send_response(HttpContext& ctx) {
     ctx.response.committed = true;
 }
 
-void inject_cache_header(std::string& response, const std::string& header) {
-    auto pos = response.find("\r\n\r\n");
-    if (pos != std::string::npos) {
-        response.insert(pos + 2, header);
+void parse_response_string(const std::string& raw_resp, HttpResponse& resp) {
+    int minor_version;
+    int status;
+    const char* msg;
+    size_t msg_len;
+    struct phr_header headers[100];
+    size_t num_headers = sizeof(headers) / sizeof(headers[0]);
+    
+    int res = phr_parse_response(raw_resp.data(), raw_resp.size(), &minor_version, &status, &msg, &msg_len, headers, &num_headers, 0);
+    if (res < 0) {
+        throw std::runtime_error("Failed to parse cached response");
+    }
+    
+    resp.status_code = status;
+    resp.body = raw_resp.substr(res);
+    
+    resp.headers.clear();
+    for (size_t i = 0; i < num_headers; ++i) {
+        std::string name(headers[i].name, headers[i].name_len);
+        std::string value(headers[i].value, headers[i].value_len);
+        resp.headers[name] = value;
     }
 }

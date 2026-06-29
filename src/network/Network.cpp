@@ -9,7 +9,9 @@
 #include <memory>
 
 #include "vendor/httplib.h"
-#include "network/HTTPParser.hpp"
+#include "utils/read_parse_request.hpp"
+#include "utils/serialize_send_response.hpp"
+#include "utils/inject_cache_header.hpp"
 
 void run_server(uint16_t port, ThreadPool& pool, ShardedCache& cache, const std::string& origin, RequestCoalescer& coalescer) {
   sockpp::tcp_acceptor acceptor(port);  // socket() -> bind() -> listen()
@@ -34,17 +36,18 @@ void run_server(uint16_t port, ThreadPool& pool, ShardedCache& cache, const std:
 }
 
 void handle_client(sockpp::tcp_socket client, ShardedCache& cache, const std::string& origin, RequestCoalescer& coalescer) {
+  HttpContext ctx(client);
   try {
-    HttpRequest req = parse_request(client);
-    std::string url = std::string(req.host) + std::string(req.path);
+    read_and_parse_request(ctx);
+    std::string url = ctx.request.host + ctx.request.path;
 
     // Primary cache lookup check.
     auto cached = cache.get(url);
     if (cached.has_value()) {
-      std::cout << "[CACHE] HIT: " << req.method << " " << req.path << std::endl;
-      std::string response = cached.value();
-      inject_cache_header(response, "X-Cache: HIT\r\n");
-      client.write_n(response.data(), response.size());
+      std::cout << "[CACHE] HIT: " << ctx.request.method << " " << ctx.request.path << std::endl;
+      parse_response_string(cached.value(), ctx.response);
+      inject_cache_header(ctx, "HIT");
+      send_response(ctx);
       return;
     }
 
@@ -55,27 +58,28 @@ void handle_client(sockpp::tcp_socket client, ShardedCache& cache, const std::st
       auto cached = cache.get(url);
       if (cached.has_value()) {
         coalescer.complete(url);
-        std::cout << "[CACHE] HIT: " << req.method << " " << req.path << std::endl;
-        std::string response = cached.value();
-        inject_cache_header(response, "X-Cache: HIT\r\n");
-        client.write_n(response.data(), response.size());
+        std::cout << "[CACHE] HIT: " << ctx.request.method << " " << ctx.request.path << std::endl;
+        parse_response_string(cached.value(), ctx.response);
+        inject_cache_header(ctx, "HIT");
+        send_response(ctx);
         return;
       }
 
       try {
         int ttl = 60; // Default TTL of 60 seconds
-        std::string response = fetch_from_backend(origin, req.path, &ttl);
+        std::string response = fetch_from_backend(origin, ctx.request.path, &ttl);
 
         // Cache the newly retrieved content if caching is enabled (ttl > 0)
         if (ttl > 0) {
           cache.put(url, response, ttl);
         }
-        std::cout << "[CACHE] MISS: " << req.method << " " << req.path << std::endl;
-        inject_cache_header(response, "X-Cache: MISS\r\n");
+        std::cout << "[CACHE] MISS: " << ctx.request.method << " " << ctx.request.path << std::endl;
+        parse_response_string(response, ctx.response);
+        inject_cache_header(ctx, "MISS");
 
         // Unblock waiting sibling threads.
         coalescer.complete(url);
-        client.write_n(response.data(), response.size());
+        send_response(ctx);
       } catch (...) {
         // Broadcast the failure to waiting threads to prevent deadlock, then rethrow.
         coalescer.fail(url, std::current_exception());
@@ -89,10 +93,10 @@ void handle_client(sockpp::tcp_socket client, ShardedCache& cache, const std::st
         if (!cached.has_value()) {
           throw ProxyException(500, "Internal Server Error", "Coalesced response not found in cache");
         }
-        std::cout << "[CACHE] HIT (Coalesced): " << req.method << " " << req.path << std::endl;
-        std::string response = cached.value();
-        inject_cache_header(response, "X-Cache: HIT\r\n");
-        client.write_n(response.data(), response.size());
+        std::cout << "[CACHE] HIT (Coalesced): " << ctx.request.method << " " << ctx.request.path << std::endl;
+        parse_response_string(cached.value(), ctx.response);
+        inject_cache_header(ctx, "HIT");
+        send_response(ctx);
         return;
       } catch (const ProxyException&) {
         throw;
@@ -106,11 +110,11 @@ void handle_client(sockpp::tcp_socket client, ShardedCache& cache, const std::st
   } catch (const ProxyException& e) {
     std::cerr << "[PROXY ERROR] " << e.what() << "\n";
     std::string err_resp = ProxyException::generate_http_response(e.get_status_code(), e.get_http_message());
-    client.write_n(err_resp.data(), err_resp.size());
+    ctx.socket.write_n(err_resp.data(), err_resp.size());
   } catch (const std::exception& e) {
     std::cerr << "[FATAL CRASH] " << e.what() << "\n";
     std::string err_resp = ProxyException::generate_http_response(500, "Internal Server Error");
-    client.write_n(err_resp.data(), err_resp.size());
+    ctx.socket.write_n(err_resp.data(), err_resp.size());
   }
 }
 

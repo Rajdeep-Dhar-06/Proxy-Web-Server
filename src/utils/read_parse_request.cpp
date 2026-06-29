@@ -1,13 +1,11 @@
-#include "network/HTTPParser.hpp"
-
+#include "utils/read_parse_request.hpp"
 #include <algorithm>
 #include <cctype>
 #include <vector>
-
 #include "error/ErrorHandler.hpp"
 #include "vendor/picohttpparser.h"
 
-HttpRequest parse_request(sockpp::tcp_socket& client) {
+void read_and_parse_request(HttpContext& ctx) {
   std::vector<char> req_buf;
   size_t prevbuflen = 0;
 
@@ -21,7 +19,7 @@ HttpRequest parse_request(sockpp::tcp_socket& client) {
 
   while (true) {
     char read_buf[4096];
-    auto read_res = client.read(read_buf, sizeof(read_buf));
+    auto read_res = ctx.socket.read(read_buf, sizeof(read_buf));
     if (read_res <= 0) {
       throw SocketClosedException();
     }
@@ -45,11 +43,10 @@ HttpRequest parse_request(sockpp::tcp_socket& client) {
     }
   }
 
-  HttpRequest req;
   const std::string HTTP_SCHEME = "http://";
 
-  req.method = std::string(method, method_len);
-  req.path = std::string(path, path_len);
+  ctx.request.method = std::string(method, method_len);
+  ctx.request.path = std::string(path, path_len);
 
   // Extract host
   std::string host = "";
@@ -66,19 +63,17 @@ HttpRequest parse_request(sockpp::tcp_socket& client) {
   if (host.empty()) {
     throw ProxyException(400, "Bad Request", "Malformed HTTP request: missing Host header");
   }
-  req.host = host;
+  ctx.request.host = host;
 
   // Clean the path if it is absolute
-  if (req.path.substr(0, HTTP_SCHEME.size()) == HTTP_SCHEME) {
-    auto path_start = req.path.find('/', HTTP_SCHEME.size());
-    req.path = (path_start != std::string::npos) ? req.path.substr(path_start) : "/";
+  if (ctx.request.path.substr(0, HTTP_SCHEME.size()) == HTTP_SCHEME) {
+    auto path_start = ctx.request.path.find('/', HTTP_SCHEME.size());
+    ctx.request.path = (path_start != std::string::npos) ? ctx.request.path.substr(path_start) : "/";
   }
 
   // Remove Port from Host if present
-  auto colon = req.host.find(':');
+  auto colon = ctx.request.host.find(':');
   if (colon != std::string::npos) {
-    req.host = req.host.substr(0, colon);
+    ctx.request.host = ctx.request.host.substr(0, colon);
   }
-
-  return req;
 }

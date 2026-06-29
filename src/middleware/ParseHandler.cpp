@@ -1,9 +1,8 @@
 #include "middleware/ParseHandler.hpp"
 #include <exception>
 
-// Manual forward declarations of utility functions
-void read_and_parse_request(HttpContext& ctx);
-void send_response(HttpContext& ctx);
+#include "utils/read_parse_request.hpp"
+#include "utils/serialize_send_response.hpp"
 
 void ParseHandler::process(HttpContext& ctx) {
     try {
