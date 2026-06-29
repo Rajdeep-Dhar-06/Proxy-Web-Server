@@ -41,3 +41,19 @@ find_package(Threads REQUIRED)
 target_link_libraries(caching-proxy PRIVATE Threads::Threads sockpp)
 find_package(OpenSSL REQUIRED)
 target_link_libraries(caching-proxy PRIVATE Threads::Threads sockpp OpenSSL::SSL OpenSSL::Crypto)
+
+# Enable testing framework
+enable_testing()
+
+# Build the cache test executable
+add_executable(test_cache
+    tests/test_cache.cpp
+    src/cache/LRUCache.cpp
+    src/cache/ShardedCache.cpp
+)
+target_include_directories(test_cache PRIVATE include)
+target_link_libraries(test_cache PRIVATE Threads::Threads)
+
+# Add cache_test to CTest
+add_test(NAME cache_test COMMAND test_cache)
+
