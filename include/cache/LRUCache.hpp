@@ -8,6 +8,8 @@
  */
 
 #pragma once
+#include "./ICache.hpp"
+#include <memory>
 #include <mutex>
 #include <optional>
 #include <string>
@@ -25,11 +27,11 @@ using timepoint = std::chrono::steady_clock::time_point;
  * the key, the raw HTTP response as the value, and pointers to adjacent nodes.
  */
 struct CacheNode {
-  std::string url;         ///< Cached URL key
-  std::string response;    ///< Raw HTTP response value
-  CacheNode *prev;         ///< Pointer to the previous node in the list
-  CacheNode *next;         ///< Pointer to the next node in the list
-  timepoint expiration;    ///< Expiration Time
+  std::string url;                       ///< Cached URL key
+  std::string response;                  ///< Raw HTTP response value
+  std::weak_ptr<CacheNode> prev;         ///< Pointer to the previous node in the list
+  std::shared_ptr<CacheNode> next;       ///< Pointer to the next node in the list
+  timepoint expiration;                  ///< Expiration Time
 
   /**
    * @brief Constructs a new CacheNode.
@@ -37,7 +39,7 @@ struct CacheNode {
    * @param val The cache value (response payload).
    */
   CacheNode(const std::string &key, std::string val, timepoint expires_at)
-      : url(key), response(std::move(val)), prev(nullptr), next(nullptr), expiration(expires_at) {}
+      : url(key), response(std::move(val)), prev(), next(nullptr), expiration(expires_at) {}
 };
 
 /**
@@ -48,38 +50,38 @@ struct CacheNode {
  * capacity, it evicts the least recently accessed items first. All public methods
  * are synchronized using a mutex to ensure thread-safety.
  */
-class LRUCache {
+class LRUCache : public ICache {
 private:
   int capacity;                                 ///< Maximum capacity of the cache
   int size;                                     ///< Current number of entries in the cache
-  CacheNode *head;                              ///< Dummy head node of the doubly linked list
-  CacheNode *tail;                              ///< Dummy tail node of the doubly linked list
-  std::unordered_map<std::string, CacheNode *> cacheMap;  ///< Map for fast O(1) node lookups by URL
+  std::shared_ptr<CacheNode> head;                              ///< Dummy head node of the doubly linked list
+  std::shared_ptr<CacheNode> tail;                              ///< Dummy tail node of the doubly linked list
+  std::unordered_map<std::string, std::shared_ptr<CacheNode>> cacheMap;  ///< Map for fast O(1) node lookups by URL
   std::mutex cacheMutex;                             ///< Mutex for thread-safe synchronization
 
   /**
    * @brief Promotes a node to the head of the doubly linked list (most recently used).
    * @param node Pointer to the node to move.
    */
-  void moveToHead(CacheNode *node);
+  void moveToHead(std::shared_ptr<CacheNode> node);
 
   /**
    * @brief Unlinks a node from its neighbors in the doubly linked list.
    * @param node Pointer to the node to remove.
    */
-  void removeNode(CacheNode *node);
+  void removeNode(std::shared_ptr<CacheNode> node);
 
   /**
    * @brief Inserts a node immediately after the dummy head node.
    * @param node Pointer to the node to insert.
    */
-  void addToHead(CacheNode *node);
+  void addToHead(std::shared_ptr<CacheNode> node);
 
   /**
    * @brief Removes the least recently used node (immediately before dummy tail).
    * @return CacheNode* Pointer to the removed node. Caller gains ownership of the memory.
    */
-  CacheNode *removeTail();
+  std::shared_ptr<CacheNode> removeTail();
 
 public:
   /**

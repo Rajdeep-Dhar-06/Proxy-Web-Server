@@ -7,7 +7,7 @@
 #include "error/ErrorHandler.hpp"
 #include "vendor/picohttpparser.h"
 
-ParsedRequest parse_request(sockpp::tcp_socket& client) {
+HttpRequest parse_request(sockpp::tcp_socket& client) {
   std::vector<char> req_buf;
   size_t prevbuflen = 0;
 
@@ -45,7 +45,7 @@ ParsedRequest parse_request(sockpp::tcp_socket& client) {
     }
   }
 
-  ParsedRequest req;
+  HttpRequest req;
   const std::string HTTP_SCHEME = "http://";
 
   req.method = std::string(method, method_len);

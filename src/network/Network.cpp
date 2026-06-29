@@ -28,14 +28,14 @@ void run_server(uint16_t port, ThreadPool& pool, ShardedCache& cache, const std:
 
     // sockpp::tcp_socket is move-only, so we wrap it in a std::shared_ptr to
     // allow copying within the thread pool task closure.
-    auto ptr = std::make_shared<sockpp::tcp_socket>(std::move(client));
-    pool.enqueueTask([ptr, &cache, origin, &coalescer]() { handle_client(std::move(*ptr), cache, origin, coalescer); });
+    auto socket_ptr = std::make_shared<sockpp::tcp_socket>(std::move(client));
+    pool.enqueueTask([socket_ptr, &cache, origin, &coalescer]() { handle_client(std::move(*socket_ptr), cache, origin, coalescer); });
   }
 }
 
 void handle_client(sockpp::tcp_socket client, ShardedCache& cache, const std::string& origin, RequestCoalescer& coalescer) {
   try {
-    ParsedRequest req = parse_request(client);
+    HttpRequest req = parse_request(client);
     std::string url = std::string(req.host) + std::string(req.path);
 
     // Primary cache lookup check.
@@ -111,13 +111,6 @@ void handle_client(sockpp::tcp_socket client, ShardedCache& cache, const std::st
     std::cerr << "[FATAL CRASH] " << e.what() << "\n";
     std::string err_resp = ProxyException::generate_http_response(500, "Internal Server Error");
     client.write_n(err_resp.data(), err_resp.size());
-  }
-}
-
-void inject_cache_header(std::string& response, const std::string& header) {
-  auto pos = response.find("\r\n\r\n");
-  if (pos != std::string::npos) {
-    response.insert(pos + 2, header);
   }
 }
 

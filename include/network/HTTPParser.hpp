@@ -10,10 +10,6 @@ public:
   }
 };
 
-struct ParsedRequest {
-  std::string method; ///< The HTTP method 
-  std::string path;   ///< The relative request path
-  std::string host;   ///< The target host domain name
-};
+#include "HttpContext.hpp"
 
-ParsedRequest parse_request(sockpp::tcp_socket& client);
+HttpRequest parse_request(sockpp::tcp_socket& client);

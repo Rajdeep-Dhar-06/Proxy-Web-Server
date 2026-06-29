@@ -22,6 +22,7 @@ set(SOCKPP_BUILD_EXAMPLES OFF CACHE INTERNAL "")
 set(SOCKPP_BUILD_TESTS OFF CACHE INTERNAL "")
 
 add_executable(caching-proxy
+    utils.cpp
     src/main.cpp
     src/concurrency/ThreadPool.cpp
     src/cache/LRUCache.cpp
@@ -31,6 +32,9 @@ add_executable(caching-proxy
     src/network/RequestCoalescer.cpp
     src/error/ErrorHandler.cpp
     src/vendor/picohttpparser.c
+    src/middleware/ParseHandler.cpp
+    src/middleware/CacheHandler.cpp
+    src/middleware/UpstreamHandler.cpp
 )
 
 # Specify the include directories

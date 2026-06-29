@@ -8,7 +8,7 @@
  */
 
 #pragma once
-#include "cache/LRUCache.hpp"
+#include "./LRUCache.hpp"
 #include <functional>
 #include <memory>
 #include <vector>
@@ -21,7 +21,7 @@
  * contains its own independent lock, enabling threads to access and update cache
  * entries in parallel as long as their hash keys map to different shards.
  */
-class ShardedCache {
+class ShardedCache : public ICache {
 private:
   std::vector<std::unique_ptr<LRUCache>> shards;     ///< List of independent LRU cache shards
   std::hash<std::string> hasher;                          ///< Hash function to map keys to shards
