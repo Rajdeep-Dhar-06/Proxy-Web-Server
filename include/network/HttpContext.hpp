@@ -3,9 +3,9 @@
 
 #include <string>
 #include <unordered_map>
-#include <vector>
 
 struct HttpRequest {
+  // Members
   std::string method;
   std::string path;
   std::string host;
@@ -14,21 +14,24 @@ struct HttpRequest {
 };
 
 struct HttpResponse {
-  int status_code;
+  // Members
   std::unordered_map<std::string, std::string> headers;
   std::string body;
+  int status_code;
+  int ttl;
   bool committed = false;
-  int ttl = 60;
 };
 
 class HttpContext {
  public:
+  // Constructor
+  HttpContext(sockpp::tcp_socket& sock) : socket(sock) {}
+
+  // Members
   HttpRequest request;
   HttpResponse response;
-  sockpp::tcp_socket& socket;  // Reference to the active TCP connection
+  sockpp::tcp_socket& socket;
 
   // Shared state flags for middleware coordination
   bool skip_cache = false;
-
-  HttpContext(sockpp::tcp_socket& sock) : socket(sock) {}
 };

@@ -1,12 +1,17 @@
 #pragma once
-#include "network/Middleware.hpp"
 #include <string>
 
-class UpstreamHandler : public Middleware {
-private:
-    std::string origin;
+#include "Middleware.hpp"
 
-public:
-    explicit UpstreamHandler(std::string origin_server);
-    void process(HttpContext& ctx) override;
+class UpstreamHandler : public Middleware {
+ public:
+  // Constructor
+  explicit UpstreamHandler(std::string origin_server);
+
+  // Core processing
+  void process(HttpContext& ctx) override;
+
+ private:
+  // Members
+  std::string origin;
 };
