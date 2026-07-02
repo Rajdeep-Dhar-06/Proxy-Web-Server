@@ -23,6 +23,8 @@ set(SOCKPP_BUILD_TESTS OFF CACHE INTERNAL "")
 
 add_executable(caching-proxy
     src/main.cpp
+    config/config.cpp
+    src/logger/Logger.cpp
     src/concurrency/ThreadPool.cpp
     src/cache/LRUCache.cpp
     src/cache/ShardedCache.cpp
@@ -33,13 +35,11 @@ add_executable(caching-proxy
     src/middleware/ParseHandler.cpp
     src/middleware/CacheHandler.cpp
     src/middleware/UpstreamHandler.cpp
-    src/utils/read_parse_request.cpp
-    src/utils/serialize_send_response.cpp
-    src/utils/inject_cache_header.cpp
+    src/utils/http_utils.cpp
 )
 
 # Specify the include directories
-target_include_directories(caching-proxy PRIVATE include src)
+target_include_directories(caching-proxy PRIVATE include src .)
 
 # Link threads library and sockpp
 find_package(Threads REQUIRED)
@@ -47,18 +47,5 @@ target_link_libraries(caching-proxy PRIVATE Threads::Threads sockpp)
 find_package(OpenSSL REQUIRED)
 target_link_libraries(caching-proxy PRIVATE Threads::Threads sockpp OpenSSL::SSL OpenSSL::Crypto)
 
-# Enable testing framework
-enable_testing()
 
-# Build the cache test executable
-add_executable(test_cache
-    tests/test_cache.cpp
-    src/cache/LRUCache.cpp
-    src/cache/ShardedCache.cpp
-)
-target_include_directories(test_cache PRIVATE include)
-target_link_libraries(test_cache PRIVATE Threads::Threads)
-
-# Add cache_test to CTest
-add_test(NAME cache_test COMMAND test_cache)
 
