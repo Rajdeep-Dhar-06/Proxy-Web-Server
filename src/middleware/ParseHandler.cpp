@@ -1,19 +1,24 @@
 #include "middleware/ParseHandler.hpp"
+
 #include <exception>
 
-#include "utils/read_parse_request.hpp"
-#include "utils/serialize_send_response.hpp"
+#include "error/ErrorHandler.hpp"
+#include "logger/Logger.hpp"
+#include "utils/http_utils.hpp"
 
 void ParseHandler::process(HttpContext& ctx) {
-    try {
-        read_and_parse_request(ctx);
-        // Parsing succeeded. Pass control to the next handler (CacheHandler)
-        Middleware::process(ctx);
-    } 
-    catch (const std::exception& e) {
-        // Short-circuit: Create error response and do NOT call Middleware::process()
-        ctx.response.status_code = 400;
-        ctx.response.body = "Malformed HTTP request";
-        send_response(ctx);
-    }
+  try {
+    read_and_parse_request(ctx);
+    Middleware::process(ctx);
+  } catch (const SocketClosedException&) {
+    // Client connection closed; abort pipeline execution silently
+    return;
+  } catch (const ProxyException& e) {
+    e.populate_error_response(ctx.response);
+    send_response(ctx);
+  } catch (const std::exception& e) {
+    Logger::get_instance().log("Malformed HTTP request: " + std::string(e.what()), LoggerLevel::WARNING);
+    ProxyException(400, "Bad Request", "Malformed HTTP request").populate_error_response(ctx.response);
+    send_response(ctx);
+  }
 }

@@ -1,86 +1,78 @@
+// CacheHandler.cpp
 #include "middleware/CacheHandler.hpp"
 
-#include <exception>
-#include <iostream>
-
 #include "error/ErrorHandler.hpp"
-#include "utils/inject_cache_header.hpp"
-#include "utils/serialize_send_response.hpp"
+#include "logger/Logger.hpp"
+#include "network/HttpContext.hpp"
+#include "utils/http_utils.hpp"
 
 CacheHandler::CacheHandler(std::shared_ptr<ICache> cache, std::shared_ptr<RequestCoalescer> coalescer)
-    : cache(cache), coalescer(coalescer) {}
+    : cache(std::move(cache)), coalescer(std::move(coalescer)) {}
 
 void CacheHandler::process(HttpContext& ctx) {
-  std::string url = ctx.request.host + ctx.request.path;
-
-  // Primary cache lookup check.
-  auto cached = cache->get(url);
-  if (cached.has_value()) {
-    std::cout << "[CACHE] HIT: " << ctx.request.method << " " << ctx.request.path << std::endl;
-    parse_response_string(cached.value(), ctx.response);
-    inject_cache_header(ctx, "HIT");
-    send_response(ctx);
+  if (ctx.request.method != "GET") {
+    Middleware::process(ctx);  // calls the next middleware module
     return;
   }
 
-  // Attempt to coalesce duplicate concurrent requests targeting the same URL.
-  auto ticket = coalescer->start_or_join(url);
+  const std::string cache_key = ctx.request.method + ":" + ctx.request.host + ctx.request.path;
+
+  if (respond_from_cache(ctx, cache_key, "HIT")) return;
+
+  auto ticket = coalescer->start_or_join(cache_key);
   if (ticket.is_owner) {
-    // Double check in case another request populated the cache right before we claimed ownership.
-    auto cached = cache->get(url);
-    if (cached.has_value()) {
-      coalescer->complete(url);
-      std::cout << "[CACHE] HIT: " << ctx.request.method << " " << ctx.request.path << std::endl;
-      parse_response_string(cached.value(), ctx.response);
-      inject_cache_header(ctx, "HIT");
-      send_response(ctx);
-      return;
-    }
-
-    try {
-      // Call the next middleware in the pipeline (which will fetch from backend and populate ctx.response)
-      Middleware::process(ctx);
-
-      // Serialize the response that was populated by upstream/next middleware to store it in cache
-      std::string response = serialize_response(ctx);
-
-      // Cache the newly retrieved content if caching is enabled (ttl > 0)
-      if (ctx.response.ttl > 0) {
-        cache->put(url, response, ctx.response.ttl);
-      }
-
-      std::cout << "[CACHE] MISS: " << ctx.request.method << " " << ctx.request.path << std::endl;
-
-      // We need to inject the X-Cache MISS header before sending.
-      inject_cache_header(ctx, "MISS");
-
-      // Send the response back to the client
-      send_response(ctx);
-
-      // Unblock waiting sibling threads.
-      coalescer->complete(url);
-    } catch (...) {
-      // Broadcast the failure to waiting threads to prevent deadlock, then rethrow.
-      coalescer->fail(url, std::current_exception());
-      throw;
-    }
+    handle_as_owner(ctx, cache_key);
   } else {
-    // Waiter thread: block until the owner thread resolves the cache promise.
-    try {
-      ticket.done.get();
-      auto cached = cache->get(url);
-      if (!cached.has_value()) {
-        throw ProxyException(500, "Internal Server Error", "Coalesced response not found in cache");
-      }
-      std::cout << "[CACHE] HIT (Coalesced): " << ctx.request.method << " " << ctx.request.path << std::endl;
-      parse_response_string(cached.value(), ctx.response);
-      inject_cache_header(ctx, "HIT");
-      send_response(ctx);
-      return;
-    } catch (const ProxyException&) {
-      throw;
-    } catch (const std::exception& e) {
-      throw ProxyException(502, "Bad Gateway", "Upstream request failed or owner thread crashed: " + std::string(e.what()));
-    }
+    handle_as_waiter(ctx, cache_key, ticket);
   }
+}
+
+bool CacheHandler::respond_from_cache(HttpContext& ctx, const std::string& key, const char* hit_label) {
+  auto cached = cache->get(key);
+  if (!cached.has_value()) return false;
+
+  Logger::get_instance().log("CACHE " + std::string(hit_label) + ": " + ctx.request.method + " " + ctx.request.path, LoggerLevel::INFO);
+  ctx.response = cached.value();
+  ctx.response.headers["X-Cache"] = "HIT";
+  send_response(ctx);
+  return true;
+}
+
+void CacheHandler::handle_as_owner(HttpContext& ctx, const std::string& key) {
+  if (respond_from_cache(ctx, key, "HIT")) {
+    return;
+  }
+
+  try {
+    Middleware::process(ctx);  // next handler fetches from backend, fills ctx.response
+
+    auto result = std::make_shared<HttpResponse>(ctx.response);
+    if (ctx.response.ttl > 0) {
+      cache->put(key, ctx.response, ctx.response.ttl);
+    }
+
+    Logger::get_instance().log("CACHE MISS: " + ctx.request.method + " " + ctx.request.path, LoggerLevel::INFO);
+    ctx.response.headers["X-Cache"] = "MISS";
+    send_response(ctx);
+    coalescer->complete(key, result);
+  } catch (...) {
+    coalescer->fail(key, std::current_exception());
+    throw;
+  }
+}
+
+void CacheHandler::handle_as_waiter(HttpContext& ctx, const std::string& key, RequestCoalescer::Ticket& ticket) {
+  std::shared_ptr<HttpResponse> result;
+  try {
+    result = ticket.done.get();  // rethrows whatever fail() set, if anything
+  } catch (const ProxyException&) {
+    throw;
+  } catch (const std::exception& e) {
+    throw ProxyException(502, "Bad Gateway", "Upstream request failed: " + std::string(e.what()));
+  }
+
+  Logger::get_instance().log("CACHE HIT (Coalesced): " + ctx.request.method + " " + ctx.request.path, LoggerLevel::INFO);
+  ctx.response = *result;
+  ctx.response.headers["X-Cache"] = "HIT";
+  send_response(ctx);
 }
