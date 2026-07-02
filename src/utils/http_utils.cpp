@@ -1,9 +1,35 @@
-#include "utils/read_parse_request.hpp"
+#include "utils/http_utils.hpp"
+
+#include <sockpp/tcp_socket.h>
+
 #include <algorithm>
 #include <cctype>
 #include <vector>
+
+#include "config/config.hpp"
 #include "error/ErrorHandler.hpp"
 #include "vendor/picohttpparser.h"
+
+std::string get_status_message(int status_code) {
+  switch (status_code) {
+    case 200:
+      return "OK";
+    case 304:
+      return "Not Modified";
+    case 400:
+      return "Bad Request";
+    case 403:
+      return "Forbidden";
+    case 404:
+      return "Not Found";
+    case 500:
+      return "Internal Server Error";
+    case 502:
+      return "Bad Gateway";
+    default:
+      return "OK";
+  }
+}
 
 void read_and_parse_request(HttpContext& ctx) {
   std::vector<char> req_buf;
@@ -37,8 +63,9 @@ void read_and_parse_request(HttpContext& ctx) {
       throw ProxyException(400, "Bad Request", "Malformed HTTP request");
     } else if (res == -2) {
       prevbuflen = prev_size;
-      if (req_buf.size() >= 8192) {
-        throw ProxyException(431, "Request Header Fields Too Large", "HTTP header size exceeds 8KB limit");
+      if (req_buf.size() >= static_cast<size_t>(config.MAX_HEADER_BYTES)) {
+        throw ProxyException(431, "Request Header Fields Too Large",
+                             "HTTP header size exceeds " + std::to_string(config.MAX_HEADER_BYTES) + " bytes limit");
       }
     }
   }
@@ -76,4 +103,33 @@ void read_and_parse_request(HttpContext& ctx) {
   if (colon != std::string::npos) {
     ctx.request.host = ctx.request.host.substr(0, colon);
   }
+}
+
+std::string serialize_response(HttpResponse& response) {
+  std::string status_msg = get_status_message(response.status_code);
+  std::string raw_resp = "HTTP/1.1 " + std::to_string(response.status_code) + " " + status_msg + "\r\n";  // Status line
+
+  // Set Content-Length if body is present and it is not already set
+  if (response.headers.find("Content-Length") == response.headers.end() &&
+      response.headers.find("Transfer-Encoding") == response.headers.end()) {
+    response.headers["Content-Length"] = std::to_string(response.body.size());
+  }
+
+  // Write all headers
+  for (const auto& [key, value] : response.headers) {
+    raw_resp += key + ": " + value + "\r\n";
+  }
+
+  raw_resp += "\r\n";  // End of headers block
+  raw_resp += response.body;
+  return raw_resp;
+}
+
+void send_response(HttpContext& ctx) {
+  if (ctx.response.committed) {
+    return;
+  }
+  std::string raw_resp = serialize_response(ctx.response);
+  ctx.socket.write_n(raw_resp.data(), raw_resp.size());
+  ctx.response.committed = true;
 }
