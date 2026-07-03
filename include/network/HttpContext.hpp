@@ -9,8 +9,8 @@ struct HttpRequest {
   std::string method;
   std::string path;
   std::string host;
-  // std::unordered_map<std::string, std::string> headers;
-  // std::string body;
+  std::unordered_map<std::string, std::string> headers;
+  std::string body;
 };
 
 struct HttpResponse {

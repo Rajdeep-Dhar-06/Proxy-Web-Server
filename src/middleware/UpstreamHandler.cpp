@@ -1,11 +1,11 @@
 #include "middleware/UpstreamHandler.hpp"
 
-#include "config/config.hpp"
-#define CPPHTTPLIB_OPENSSL_SUPPORT
 #include <memory>
 
+#include "config/config.hpp"
 #include "error/ErrorHandler.hpp"
 #include "logger/Logger.hpp"
+#include "utils/http_utils.hpp"
 #include "vendor/httplib.h"
 
 UpstreamHandler::UpstreamHandler(std::string origin_server) : origin(origin_server) {}
@@ -23,59 +23,50 @@ void UpstreamHandler::process(HttpContext& ctx) {
     backend->enable_server_certificate_verification(false);
   }
 
+  // Adding headers
+  httplib::Headers headers_to_send;
+  for (const auto& [key, val] : ctx.request.headers) {
+    if (key == "host" || key == "content-length") continue;
+    headers_to_send.insert({key, val});
+  }
+
   // Fetch using httplib
-  Logger::get_instance().log("Fetching from upstream: " + ctx.request.path, LoggerLevel::INFO);
-  auto res = backend->Get(ctx.request.path.c_str());
+  httplib::Request req;
+  req.method = ctx.request.method;  // http method
+  req.path = ctx.request.path;      // "/login"
+  req.headers = headers_to_send;    // headers
+  req.body = ctx.request.body;      // body
+
+  Logger::get_instance().log("[SERVER FETCH]\t" + ctx.request.method + " " + origin + ctx.request.path, LoggerLevel::INFO);
+  auto res = backend->send(req);
 
   if (!res) {
-    Logger::get_instance().log("Backend unreachable to " + ctx.request.path, LoggerLevel::ERROR);
+    Logger::get_instance().log("[BACKEND ERROR]\t" + ctx.request.method + " " + origin + ctx.request.path + " (Unreachable)",
+                               LoggerLevel::ERROR);
     throw ProxyException(502, "Bad Gateway", "Backend unreachable");
   }
 
-  if (res->status != 200) {
-    Logger::get_instance().log("Upstream returned " + std::to_string(res->status) + " to " + ctx.request.path, LoggerLevel::ERROR);
-    throw ProxyException(res->status, "Upstream Error", "Failed");
+  if (res->status >= 100 && res->status < 200) {
+    Logger::get_instance().log(
+        "[SERVER INFO]\t" + ctx.request.method + " " + origin + ctx.request.path + " (Status: " + std::to_string(res->status) + ")",
+        LoggerLevel::INFO);
+  } else if (res->status >= 200 && res->status < 300) {
+    Logger::get_instance().log(
+        "[SERVER SUCCESS]\t" + ctx.request.method + " " + origin + ctx.request.path + " (Status: " + std::to_string(res->status) + ")",
+        LoggerLevel::INFO);
+  } else if (res->status >= 300 && res->status < 400) {
+    Logger::get_instance().log(
+        "[SERVER REDIRECT]\t" + ctx.request.method + " " + origin + ctx.request.path + " (Status: " + std::to_string(res->status) + ")",
+        LoggerLevel::INFO);
+  } else if (res->status >= 400 && res->status < 500) {
+    Logger::get_instance().log(
+        "[CLIENT ERROR]\t" + ctx.request.method + " " + origin + ctx.request.path + " (Status: " + std::to_string(res->status) + ")",
+        LoggerLevel::WARNING);
+  } else if (res->status >= 500 && res->status < 600) {
+    Logger::get_instance().log(
+        "[SERVER ERROR]\t" + ctx.request.method + " " + origin + ctx.request.path + " (Status: " + std::to_string(res->status) + ")",
+        LoggerLevel::ERROR);
   }
 
-  size_t content_length = 0;
-  if (res->has_header("Content-Length")) {
-    content_length = std::stoull(res->get_header_value("Content-Length"));  // overshoot, wont be this much
-  }
-
-  bool exceeds_cacheable = false;
-  if (content_length > config.MAX_CACHEABLE) exceeds_cacheable = true;
-
-  // Populate HttpResponse inside ctx
-  ctx.response.status_code = res->status;
-  ctx.response.body = res->body;
-  ctx.response.ttl = exceeds_cacheable ? 0 : config.TTL;
-
-  if (res->has_header("Cache-Control")) {
-    std::string cache_control = res->get_header_value("Cache-Control");
-
-    if (cache_control.find("no-store") != std::string::npos || cache_control.find("no-cache") != std::string::npos ||
-        cache_control.find("private") != std::string::npos) {
-      //
-    } else {
-      size_t pos = cache_control.find("max-age=");
-      if (pos != std::string::npos) {
-        std::string num_str = cache_control.substr(pos + 8);
-        size_t comma_pos = num_str.find(',');
-        if (comma_pos != std::string::npos) {
-          num_str = num_str.substr(0, comma_pos);
-        }
-        try {
-          ctx.response.ttl = std::stoi(num_str);
-        } catch (...) {
-          ctx.response.ttl = config.TTL;
-        }
-      }
-    }
-  }
-
-  // Forward safe headers from the origin response
-  for (const auto& [key, value] : res->headers) {
-    if (key == "Content-Length" || key == "Transfer-Encoding") continue;
-    ctx.response.headers[key] = value;
-  }
+  populate_response(ctx, *res);
 }
