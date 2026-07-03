@@ -33,6 +33,20 @@ graph TD
     Invalidate --> Client
 ```
 
+### 📋 Architectural & System Design Patterns
+
+| System Design Pattern | Component in Code | Core Feature & Purpose |
+| :--- | :--- | :--- |
+| **Chain of Responsibility** | [`Middleware`](file:///home/rajdeep/proxyserver/caching-proxy/include/middleware/Middleware.hpp), [`ParseHandler`](file:///home/rajdeep/proxyserver/caching-proxy/src/middleware/ParseHandler.cpp), [`CacheHandler`](file:///home/rajdeep/proxyserver/caching-proxy/src/middleware/CacheHandler.cpp), [`UpstreamHandler`](file:///home/rajdeep/proxyserver/caching-proxy/src/middleware/UpstreamHandler.cpp) | Models request processing as sequential modular handlers (parsing -> caching -> fetching), allowing clean decoupling of pipeline steps. |
+| **Singleton** | [`Logger`](file:///home/rajdeep/proxyserver/caching-proxy/src/logger/Logger.cpp) | Ensures a single globally accessible logging instance across the multithreaded server to coordinate safe concurrent writes to the file stream. |
+| **Thread Pool** | [`ThreadPool`](file:///home/rajdeep/proxyserver/caching-proxy/src/concurrency/ThreadPool.cpp) | Manages a fixed size worker pool to queue and execute client socket connections, avoiding thread creation overhead and system exhaustion. |
+| **Cache Sharding (Data Partitioning)** | [`ShardedCache`](file:///home/rajdeep/proxyserver/caching-proxy/src/cache/ShardedCache.cpp) | Splits the cache into 12 distinct shards and hashes key routes to prevent global lock contention in multithreaded readers/writers. |
+| **Request Coalescing (Future/Promise)** | [`RequestCoalescer`](file:///home/rajdeep/proxyserver/caching-proxy/src/network/RequestCoalescer.cpp) | Dedupes concurrent uncached hits (thundering herd protection) by letting the first thread retrieve data while others block on a `std::shared_future`. |
+| **Observer (Publish-Subscribe)** | [`RequestCoalescer`](file:///home/rajdeep/proxyserver/caching-proxy/src/network/RequestCoalescer.cpp) | The coalescing waiters are notified and wake up as soon as the fetcher thread completes the `std::promise`, resolving the future response. |
+| **RAII (Resource Acquisition Is Initialization)** | `std::lock_guard` | Automatically handles mutex locking and unlocking via scope boundaries, ensuring zero deadlock conditions on exceptions or premature returns. |
+
+---
+
 ### 1. Multi-threaded Worker Pool (`ThreadPool`)
 Instead of spawning a thread per TCP connection (which wastes resources and adds context-switching overhead), the server pre-allocates a fixed-size worker pool based on hardware capability. Incoming connections accepted by the main thread are enqueued onto a thread-safe queue. Idle threads wake up to process connections, ensuring bounded resource consumption.
 
@@ -189,7 +203,7 @@ Send a write request with custom client headers and a JSON body. The proxy will 
 curl -i -X POST http://localhost:8080/posts \
   -H "Content-Type: application/json" \
   -H "X-Custom-Client-Header: Hello" \
-  -d '{"title": "C++ Caching Proxy", "body": "recruiter check", "userId": 1}'
+  -d '{"title": "C++ Caching Proxy", "body": "check", "userId": 1}'
 ```
 
 ### 3. PUT Cache Invalidation

@@ -10,6 +10,8 @@
 #include "error/ErrorHandler.hpp"
 #include "vendor/picohttpparser.h"
 
+namespace http {
+
 // Helper Functions
 
 // Reads from the socket until the complete HTTP request line and headers are received
@@ -221,3 +223,5 @@ void send_response(HttpContext& ctx) {
   ctx.socket.write_n(raw_resp.data(), raw_resp.size());
   ctx.response.committed = true;
 }
+
+}  // namespace http

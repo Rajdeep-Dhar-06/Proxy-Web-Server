@@ -11,7 +11,7 @@ class SocketClosedException : public std::exception {
   const char* what() const noexcept override { return "Socket closed"; }
 };
 
-// HTTP utility functions
+namespace http {
 
 // Maps HTTP status codes to standard reason phrases
 std::string get_status_message(int status_code);
@@ -27,3 +27,5 @@ std::string serialize_response(HttpResponse& response);
 
 // Sends the response in HttpContext back to the client socket and marks it committed
 void send_response(HttpContext& ctx);
+
+}  // namespace http

@@ -40,7 +40,7 @@ bool CacheHandler::respond_from_cache(HttpContext& ctx, const std::string& key, 
   Logger::get_instance().log("[CACHE HIT]\t" + ctx.request.method + " " + config.ORIGIN + ctx.request.path, LoggerLevel::INFO);
   ctx.response = cached.value();
   ctx.response.headers["X-Cache"] = "HIT";
-  send_response(ctx);
+  http::send_response(ctx);
   return true;
 }
 
@@ -59,7 +59,7 @@ void CacheHandler::handle_as_owner(HttpContext& ctx, const std::string& key) {
 
     Logger::get_instance().log("[CACHE MISS]\t" + ctx.request.method + " " + config.ORIGIN + ctx.request.path, LoggerLevel::INFO);
     ctx.response.headers["X-Cache"] = "MISS";
-    send_response(ctx);
+    http::send_response(ctx);
     coalescer->complete(key, result);
   } catch (...) {
     coalescer->fail(key, std::current_exception());
@@ -80,5 +80,5 @@ void CacheHandler::handle_as_waiter(HttpContext& ctx, const std::string& key, Re
   Logger::get_instance().log("[COALESCED HIT]\t" + ctx.request.method + " " + config.ORIGIN + ctx.request.path, LoggerLevel::INFO);
   ctx.response = *result;
   ctx.response.headers["X-Cache"] = "HIT";
-  send_response(ctx);
+  http::send_response(ctx);
 }

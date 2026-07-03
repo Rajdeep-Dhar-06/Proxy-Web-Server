@@ -68,5 +68,5 @@ void UpstreamHandler::process(HttpContext& ctx) {
         LoggerLevel::ERROR);
   }
 
-  populate_response(ctx, *res);
+  http::populate_response(ctx, *res);
 }
