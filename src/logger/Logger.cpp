@@ -37,7 +37,7 @@ void Logger::log(const std::string& message, LoggerLevel loggerLevel) {
   std::string level = get_level(loggerLevel);
 
   std::string fullMessage = "[Time : " + curr_time + "] [" + level + "] : " + message;
-  std::cout << "[Time : " + curr_time + "] " + message << std::endl;
+  std::cout << "[" + curr_time + "] [" + level + "] " + message << std::endl;
 
   if (log_file.is_open()) {
     log_file << fullMessage << std::endl;
