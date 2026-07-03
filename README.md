@@ -1,45 +1,94 @@
-# C++ Caching Proxy Server
+# C++17 Caching Reverse Proxy Server
 
-A high-performance, multi-threaded Caching Proxy Server implemented in C++17. This server intercepts client HTTP/1.1 requests, checks a thread-safe Sharded LRU Cache to serve cached responses immediately, coalesces concurrent requests to the same target resource to mitigate backend load, and forwards cache misses to the destination origin server.
-
----
-
-## Technical Architecture
-
-The server is built with modern systems programming patterns to ensure high throughput, safety, and correctness under concurrent workloads:
-
-1. **Multi-threaded Worker Pool (ThreadPool)**: Rather than spawning a thread per TCP connection, the server pre-allocates a fixed-size worker thread pool. Connections accepted by the main thread are enqueued onto a task queue, minimizing context-switching overhead and bounding resource consumption.
-2. **Lock-Contention Mitigation (Sharded Cache)**: A single global cache requires a single mutex, making it a severe concurrency bottleneck. This implementation shards the LRU cache into 16 independent partition buckets. Requests are routed to a specific shard using the hash of their URL key, allowing concurrent threads to read and write without lock contention.
-3. **Thundering Herd Protection (Request Coalescing)**: To prevent cache stampede when multiple clients request an uncached resource at the same time, the server implements request coalescing. Using C++17 `std::promise` and `std::shared_future`, only the first request (the owner) fetches from the backend. Concurrent waiters block on the shared future, automatically resolving and serving the response from the cache once the owner finishes.
-4. **Incremental Stream Parsing (picohttpparser)**: TCP is a stream-oriented protocol where HTTP headers may arrive fragmented across network packets. The server utilizes the fast C-based `picohttpparser` in an incremental socket-reading loop to correctly handle partial packet header fragmentation.
-5. **OpenSSL/HTTPS Backend Support**: The network client natively supports fetching from secure HTTPS targets as well as standard HTTP backends by conditionally instantiating SSL-enabled clients.
+A multi-threaded Caching Reverse Proxy Server implemented in C++17. Designed as an intermediate gateway, this server intercepts client HTTP/1.1 requests, inspects a thread-safe Sharded LRU Cache to serve cached responses instantly, coalesces concurrent requests targeting the same upstream resource to mitigate backend stampede, and dynamically routes cache misses to secure HTTPS or plain HTTP target origins.
 
 ---
 
-## Directory Layout
+## 🛠️ System Architecture & Design Patterns
+
+The server is built with modern systems programming patterns to ensure high throughput, safety, and strict correctness under heavy concurrent workloads:
+
+```mermaid
+graph TD
+    Client[Client Connection] --> ParseHandler[ParseHandler: Reads Socket & Parses HTTP]
+    ParseHandler --> CacheHandler[CacheHandler: GET Request?]
+    
+    CacheHandler -- Yes (GET) --> CacheLook{In LRU Cache?}
+    CacheLook -- Yes (HIT) --> RespondCache[Serve from Cache] --> Client
+    CacheLook -- No (MISS) --> HerdCheck{Active In-flight Fetch?}
+    
+    HerdCheck -- Yes (Join) --> Coalesce[Coalesce: Block on std::shared_future]
+    Coalesce --> ResolveWaiter[Serve same response once finished] --> Client
+    
+    HerdCheck -- No (Fetch) --> UpstreamHandler[UpstreamHandler: Dynamic forward via cpp-httplib]
+    UpstreamHandler --> Upstream[(Upstream Target Origin)]
+    Upstream --> UpstreamHandler
+    UpstreamHandler --> CacheHandler
+    CacheHandler --> Save[Cache Response & Resolve Futures] --> Client
+    
+    CacheHandler -- No (POST/PUT/DELETE) --> UpstreamHandler2[UpstreamHandler: Forward Request]
+    UpstreamHandler2 --> Upstream
+    Upstream --> UpstreamHandler2
+    UpstreamHandler2 --> Invalidate[CacheHandler: Invalidate Stale Cache Key]
+    Invalidate --> Client
+```
+
+### 1. Multi-threaded Worker Pool (`ThreadPool`)
+Instead of spawning a thread per TCP connection (which wastes resources and adds context-switching overhead), the server pre-allocates a fixed-size worker pool based on hardware capability. Incoming connections accepted by the main thread are enqueued onto a thread-safe queue. Idle threads wake up to process connections, ensuring bounded resource consumption.
+
+### 2. Lock-Contention Mitigation (`ShardedCache`)
+A single global cache guarded by a single mutex is a major bottleneck under high concurrency. To mitigate lock contention, the cache is partitioned into **12 independent shards**. Requests are routed to a specific shard using the hash of their URL key, enabling concurrent threads to read and write without blocking each other.
+
+### 3. Thundering Herd Protection (`RequestCoalescer`)
+To prevent cache stampedes (when multiple clients request an uncached resource simultaneously), the proxy implements **Request Coalescing**. Using C++17 `std::promise` and `std::shared_future`, only the first request (the owner) fetches from the backend. Concurrent waiters block on the shared future and are served the response directly from memory once the owner completes, shielding the backend server.
+
+### 4. Zero-Copy Incremental Stream Parsing (`picohttpparser`)
+HTTP headers may arrive fragmented across network packets. The server utilizes `picohttpparser` in an incremental socket-reading loop to correctly handle partial packet header fragmentation with zero-copy speeds.
+
+### 5. Dynamic Cache Invalidation & Force Cache
+*   **Automatic Cache Invalidation**: The proxy intercepts writes (`POST`, `PUT`, `PATCH`, `DELETE`). Successful mutations automatically trigger immediate cache invalidation of the target resource, keeping cached data consistent.
+*   **Enforced Minimum TTL**: The proxy supports overriding target `Cache-Control` restrictions (like `no-cache`, `private`, or `max-age=0`) to guarantee successful responses are cached for at least 60 seconds (or a configurable TTL), optimizing backend resource utilization.
+
+---
+
+## 📂 Project Structure
+
+The codebase is highly modularized, separating declarations, implementations, and vendor libraries:
 
 ```text
 caching-proxy/
 ├── CMakeLists.txt              # CMake build configuration
+├── Dockerfile                  # Multi-stage optimized Docker compiler build
+├── docker-compose.yml          # Container configuration with host volume mappings
 ├── README.md                   # Project documentation
-├── test_proxy.sh               # Integration test script
+├── ProxyServerLog.log          # Persisted proxy log file (mounted)
+├── config/
+│   ├── config.hpp              # Global configuration variables (TTL, port, timeouts)
+│   └── config.cpp
 ├── include/                    # Header declarations
 │   ├── cache/
-│   │   ├── LRUCache.hpp
-│   │   └── ShardedCache.hpp
+│   │   ├── CacheStrategy.hpp   # ICache interface definition
+│   │   ├── LRUCache.hpp        # Thread-safe LRU cache shard
+│   │   └── ShardedCache.hpp    # Multi-shard cache manager
 │   ├── concurrency/
-│   │   └── ThreadPool.hpp
+│   │   └── ThreadPool.hpp      # Worker pool infrastructure
 │   ├── error/
-│   │   └── ErrorHandler.hpp
+│   │   └── ErrorHandler.hpp    # Standardized proxy exceptions
+│   ├── logger/
+│   │   └── Logger.hpp          # Thread-safe singleton logging wrapper
+│   ├── middleware/
+│   │   ├── Middleware.hpp      # Chain of Responsibility base
+│   │   ├── ParseHandler.hpp    # Read, parse, and commit responses
+│   │   ├── CacheHandler.hpp    # Cache checks, hits, misses & invalidations
+│   │   └── UpstreamHandler.hpp # Downstream client request forwarding
 │   ├── network/
-│   │   ├── HTTPParser.hpp
-│   │   ├── Network.hpp
-│   │   └── RequestCoalescer.hpp
-│   └── vendor/
-│       ├── httplib.h
-│       └── picohttpparser.h
-└── src/                        # Source implementations
-    ├── main.cpp
+│   │   └── HttpContext.hpp     # HTTP context (Request, Response, Socket state)
+│   ├── utils/
+│   │   └── http_utils.hpp      # HTTP serialization, normalizing, and parsing
+│   └── vendor/                 # Embedded dependencies
+│       ├── httplib.h           # cpp-httplib client
+│       └── picohttpparser.h    # picohttpparser C library
+└── src/                        # Implementations
     ├── cache/
     │   ├── LRUCache.cpp
     │   └── ShardedCache.cpp
@@ -47,91 +96,111 @@ caching-proxy/
     │   └── ThreadPool.cpp
     ├── error/
     │   └── ErrorHandler.cpp
-    ├── network/
-    │   ├── HTTPParser.cpp
-    │   ├── Network.cpp
-    │   └── RequestCoalescer.cpp
+    ├── logger/
+    │   └── Logger.cpp
+    ├── middleware/
+    │   ├── ParseHandler.cpp
+    │   ├── CacheHandler.cpp
+    │   └── UpstreamHandler.cpp
+    ├── utils/
+    │   └── http_utils.cpp
     └── vendor/
         └── picohttpparser.c
 ```
 
 ---
 
-## Tech Stack & Dependencies
+## 🚀 Running with Docker (Recommended)
 
-*   **Language Standard**: C++17
-*   **Build System**: CMake (v3.10+)
-*   **Core Libraries**:
-    *   [sockpp](https://github.com/fpagliughi/sockpp): Modern C++ socket wrapper.
-    *   [cpp-httplib](https://github.com/yhirose/cpp-httplib): C++ HTTP/HTTPS client library.
-    *   [OpenSSL](https://www.openssl.org/): For SSL/TLS secure backend connections.
-    *   [picohttpparser](https://github.com/h2o/picohttpparser): High-performance HTTP parser.
+Docker Compose is the simplest way to run the proxy. It automatically compiles the codebase, handles volumes, configures ports, and syncs timezone details.
+
+### Fast Local Execution
+1.  **Start the proxy targeting an origin site:**
+    ```bash
+    ORIGIN=https://news.ycombinator.com docker compose up --build
+    ```
+    *   **Port Mapping**: The proxy server will listen on port `8080` of your host.
+    *   **Timezone Sync**: Automatically mounts `/etc/localtime` and maps the container timezone to your host's clock.
+    *   **Logs**: Saves logs in real-time to `./ProxyServerLog.log`.
+
+2.  **Stop the proxy:**
+    ```bash
+    docker compose down
+    ```
+
+### Inside the Multi-Stage Dockerfile
+*   **Dependency Caching**: Installs and compiles heavy external libraries (like `sockpp`) in an isolated, cached container layer. Subsequent code modifications rebuild in **2-3 seconds** instead of minutes.
+*   **Slim Runtime**: Copies the built executable and OpenSSL libraries to `debian:bookworm-slim` for a minimal, production-safe runtime footprint.
 
 ---
 
-## Prerequisites
+## 🛠️ Building & Running Locally
 
-To compile the codebase, ensure you have CMake, a C++17 compiler (GCC or Clang), and OpenSSL libraries installed on your machine.
+If you prefer building on your local machine (outside of Docker), ensure you have a C++17 compiler, CMake, and OpenSSL libraries.
 
-For Ubuntu/Debian/WSL:
+### Prerequisites (Ubuntu/Debian)
 ```bash
-sudo apt update
-sudo apt install -y build-essential cmake libssl-dev
+sudo apt update && sudo apt install -y build-essential cmake libssl-dev
 ```
----
 
-## Building the Project
-
-Configure and build the executable using CMake:
-
+### Build Steps
 ```bash
-# Configure the build directory
+# 1. Configure the build
 cmake -B build -S .
 
-# Build the executable target
+# 2. Build the executable
 cmake --build build
 ```
 
----
-
-## Running the Proxy
-
-Start the proxy server by specifying a local port and the target origin backend URL:
-
+### Run Command
 ```bash
-./build/caching-proxy --port <port> --origin <origin_url>
+./build/caching-proxy --port <port> --origin <target_origin_url>
 ```
-
-### Example
-To run the proxy server locally on port 3000 and target `http://dummyjson.com`:
-
+**Example:**
 ```bash
 ./build/caching-proxy --port 3000 --origin http://dummyjson.com
 ```
 
-In another terminal, you can perform requests to the proxy:
-```bash
-curl -I http://localhost:3000/products
-```
-
-### Cache Response Markers
-The server injects an `X-Cache` header in its responses to indicate cache state:
-*   `X-Cache: MISS`: The resource was fetched from the upstream origin.
-*   `X-Cache: HIT`: The resource was returned directly from the sharded LRU cache.
-
 ---
 
-## Testing
+## 🧪 Verification & API testing
 
-An automated shell script is provided to verify correctness, including concurrent request handling and coalescing:
+Once the server is running on `http://localhost:8080`, test its core behaviors with `curl`:
+
+### 1. GET requests & Forced Cache (Hacker News test)
+Hacker News uses `cache-control: private, max-age=0` to prevent caching. Our proxy overrides this and forces it to be cached for at least 60 seconds.
+
+*   **First Request (Cache Miss):**
+    ```bash
+    curl -i http://localhost:8080/
+    ```
+    *Logs show:* `[CACHE MISS] GET https://news.ycombinator.com/`
+
+*   **Second Request (Cache Hit):**
+    ```bash
+    curl -i http://localhost:8080/
+    ```
+    *Logs show:* `[CACHE HIT] GET https://news.ycombinator.com/` (instantaneous response)
+
+### 2. POST / PUT Dynamic Method & Payload Forwarding
+Send a write request with custom client headers and a JSON body. The proxy will dynamically preserve the HTTP method, forward your headers and payload, and return the backend's response transparently.
 
 ```bash
-./test_proxy.sh
+curl -i -X POST http://localhost:8080/posts \
+  -H "Content-Type: application/json" \
+  -H "X-Custom-Client-Header: Hello" \
+  -d '{"title": "C++ Caching Proxy", "body": "recruiter check", "userId": 1}'
 ```
 
-The test script:
-1. Validates that the project compiles successfully.
-2. Starts the proxy server in the background targeting a mockable origin.
-3. Tests cache miss and cache hit sequencing.
-4. Spawns 5 concurrent requests simultaneously to verify request coalescing (confirming only 1 request hits the backend while the remaining 4 are cleanly served as coalesced hits).
-5. Stops background processes and prints a test result report.
+### 3. PUT Cache Invalidation
+When you modify a resource, the cache must be invalidated.
+
+1.  Query `GET /posts/1` -> `[CACHE MISS]` (Fills cache).
+2.  Query `GET /posts/1` -> `[CACHE HIT]`.
+3.  Send a `PUT` request to update `/posts/1`:
+    ```bash
+    curl -i -X PUT http://localhost:8080/posts/1 \
+      -H "Content-Type: application/json" \
+      -d '{"id": 1, "title": "Updated Title", "body": "fresh data", "userId": 1}'
+    ```
+4.  Query `GET /posts/1` -> `[CACHE MISS]`. *(The cache was wiped when the PUT succeeded!)*
