@@ -11,8 +11,9 @@ class ShardedCache : public ICache {
   ShardedCache(int total_capacity, int shards_count);
 
   // Cache operations
-  std::optional<HttpResponse> get(const std::string& key);
-  void put(const std::string& key, HttpResponse response, int ttl = 3600);
+  std::optional<HttpResponse> get(const std::string& key) override;
+  void put(const std::string& key, HttpResponse response, int ttl) override;
+  void remove(const std::string& key) override;
 
  private:
   // Helpers

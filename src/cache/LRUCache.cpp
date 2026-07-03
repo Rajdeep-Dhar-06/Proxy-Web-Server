@@ -104,3 +104,13 @@ void LRUCache::put(const std::string& key, HttpResponse response, int ttl) {
   cacheMap[key] = newNode;
   size++;
 }
+
+void LRUCache::remove(const std::string& key) {
+  std::lock_guard<std::mutex> lock(cacheMutex);
+  auto it = cacheMap.find(key);
+  if (it != cacheMap.end()) {
+    remove_node(it->second);
+    cacheMap.erase(it);
+    size--;
+  }
+}

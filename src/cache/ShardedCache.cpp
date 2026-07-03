@@ -24,3 +24,5 @@ void ShardedCache::put(const std::string& key, HttpResponse response, int ttl) {
   // Delegate the storage request to the specific shard handling this key
   shards[get_shard_index(key)]->put(key, std::move(response), ttl);
 }
+
+void ShardedCache::remove(const std::string& key) { shards[get_shard_index(key)]->remove(key); }

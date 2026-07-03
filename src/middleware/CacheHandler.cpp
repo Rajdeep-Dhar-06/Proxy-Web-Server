@@ -1,6 +1,7 @@
 // CacheHandler.cpp
 #include "middleware/CacheHandler.hpp"
 
+#include "config/config.hpp"
 #include "error/ErrorHandler.hpp"
 #include "logger/Logger.hpp"
 #include "network/HttpContext.hpp"
@@ -10,12 +11,17 @@ CacheHandler::CacheHandler(std::shared_ptr<ICache> cache, std::shared_ptr<Reques
     : cache(std::move(cache)), coalescer(std::move(coalescer)) {}
 
 void CacheHandler::process(HttpContext& ctx) {
+  const std::string cache_key = ctx.request.host + ctx.request.path;
+
   if (ctx.request.method != "GET") {
     Middleware::process(ctx);  // calls the next middleware module
+
+    if (ctx.response.status_code >= 200 && ctx.response.status_code < 300) {
+      cache->remove(cache_key);
+    }
+
     return;
   }
-
-  const std::string cache_key = ctx.request.method + ":" + ctx.request.host + ctx.request.path;
 
   if (respond_from_cache(ctx, cache_key, "HIT")) return;
 
@@ -31,7 +37,7 @@ bool CacheHandler::respond_from_cache(HttpContext& ctx, const std::string& key, 
   auto cached = cache->get(key);
   if (!cached.has_value()) return false;
 
-  Logger::get_instance().log("CACHE " + std::string(hit_label) + ": " + ctx.request.method + " " + ctx.request.path, LoggerLevel::INFO);
+  Logger::get_instance().log("[CACHE HIT]\t" + ctx.request.method + " " + config.ORIGIN + ctx.request.path, LoggerLevel::INFO);
   ctx.response = cached.value();
   ctx.response.headers["X-Cache"] = "HIT";
   send_response(ctx);
@@ -51,7 +57,7 @@ void CacheHandler::handle_as_owner(HttpContext& ctx, const std::string& key) {
       cache->put(key, ctx.response, ctx.response.ttl);
     }
 
-    Logger::get_instance().log("CACHE MISS: " + ctx.request.method + " " + ctx.request.path, LoggerLevel::INFO);
+    Logger::get_instance().log("[CACHE MISS]\t" + ctx.request.method + " " + config.ORIGIN + ctx.request.path, LoggerLevel::INFO);
     ctx.response.headers["X-Cache"] = "MISS";
     send_response(ctx);
     coalescer->complete(key, result);
@@ -71,7 +77,7 @@ void CacheHandler::handle_as_waiter(HttpContext& ctx, const std::string& key, Re
     throw ProxyException(502, "Bad Gateway", "Upstream request failed: " + std::string(e.what()));
   }
 
-  Logger::get_instance().log("CACHE HIT (Coalesced): " + ctx.request.method + " " + ctx.request.path, LoggerLevel::INFO);
+  Logger::get_instance().log("[COALESCED HIT]\t" + ctx.request.method + " " + config.ORIGIN + ctx.request.path, LoggerLevel::INFO);
   ctx.response = *result;
   ctx.response.headers["X-Cache"] = "HIT";
   send_response(ctx);
