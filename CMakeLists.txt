@@ -46,6 +46,7 @@ find_package(Threads REQUIRED)
 target_link_libraries(caching-proxy PRIVATE Threads::Threads sockpp)
 find_package(OpenSSL REQUIRED)
 target_link_libraries(caching-proxy PRIVATE Threads::Threads sockpp OpenSSL::SSL OpenSSL::Crypto)
+target_compile_definitions(caching-proxy PRIVATE CPPHTTPLIB_OPENSSL_SUPPORT)
 
 
 
