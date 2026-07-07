@@ -1,0 +1,13 @@
+.git
+.gitignore
+.clangd
+.cache
+build/
+CMakeCache.txt
+CMakeFiles/
+Makefile
+*.o
+*.a
+*.so
+.vscode/
+.idea/

@@ -1,0 +1,70 @@
+
+[Time : 2026-07-03 10:06:02] [INFO] : Listening on port 8080
+[Time : 2026-07-03 10:06:19] [INFO] : Fetching from upstream: /html
+[Time : 2026-07-03 10:06:20] [ERROR] : Upstream returned 503 to /html
+[Time : 2026-07-03 10:06:20] [INFO] : Fetching from upstream: /favicon.ico
+[Time : 2026-07-03 10:06:22] [ERROR] : Upstream returned 503 to /favicon.ico
+[Time : 2026-07-03 10:06:24] [INFO] : Fetching from upstream: /html
+[Time : 2026-07-03 10:06:25] [ERROR] : Upstream returned 503 to /html
+[Time : 2026-07-03 10:06:25] [INFO] : Fetching from upstream: /favicon.ico
+[Time : 2026-07-03 10:06:27] [ERROR] : Upstream returned 503 to /favicon.ico
+[Time : 2026-07-03 10:10:04] [INFO] : Listening on port 8080
+[Time : 2026-07-03 10:10:26] [INFO] : Fetching from upstream: /html
+[Time : 2026-07-03 10:10:27] [WARNING] : Upstream returned 503 to /html
+[Time : 2026-07-03 10:10:27] [INFO] : CACHE MISS: GET /html
+[Time : 2026-07-03 10:10:35] [INFO] : Fetching from upstream: /html
+[Time : 2026-07-03 10:10:36] [WARNING] : Upstream returned 503 to /html
+[Time : 2026-07-03 10:10:36] [INFO] : CACHE MISS: GET /html
+[Time : 2026-07-03 10:13:06] [INFO] : Listening on port 8080
+[Time : 2026-07-03 10:13:16] [INFO] : Fetching from upstream: /html
+[Time : 2026-07-03 10:13:28] [DEBUG] : Joining in-flight request for key: GET:localhost/html
+[Time : 2026-07-03 10:13:31] [ERROR] : Backend unreachable to /html
+[Time : 2026-07-03 10:13:31] [INFO] : Fetching from upstream: /favicon.ico
+[Time : 2026-07-03 10:13:33] [WARNING] : Upstream returned 404 from /favicon.ico
+[Time : 2026-07-03 10:13:33] [INFO] : CACHE MISS: GET /favicon.ico
+[Time : 2026-07-03 10:15:08] [INFO] : Listening on port 8080
+[Time : 2026-07-03 10:15:17] [INFO] : Fetching from upstream: /todos/1
+[Time : 2026-07-03 10:15:17] [INFO] : CACHE MISS: GET /todos/1
+[Time : 2026-07-03 10:15:17] [INFO] : CACHE HIT: GET /todos/1
+[Time : 2026-07-03 10:15:51] [INFO] : CACHE HIT: GET /todos/1
+[Time : 2026-07-03 10:19:12] [INFO] : Listening on port 8080
+[Time : 2026-07-03 10:20:09] [INFO] : Fetching from upstream: https://news.ycombinator.com/news
+[Time : 2026-07-03 10:20:09] [INFO] : CACHE MISS: GET https://news.ycombinator.com/news
+[Time : 2026-07-03 10:20:09] [INFO] : Fetching from upstream: https://news.ycombinator.com/news.css?Ug1GY3B6Kr5c7uonNem9
+[Time : 2026-07-03 10:20:09] [INFO] : Fetching from upstream: https://news.ycombinator.com/y18.svg
+[Time : 2026-07-03 10:20:09] [INFO] : Fetching from upstream: https://news.ycombinator.com/hn.js?Ug1GY3B6Kr5c7uonNem9
+[Time : 2026-07-03 10:20:09] [INFO] : Fetching from upstream: https://news.ycombinator.com/s.gif
+[Time : 2026-07-03 10:20:10] [INFO] : CACHE MISS: GET https://news.ycombinator.com/news.css?Ug1GY3B6Kr5c7uonNem9
+[Time : 2026-07-03 10:20:10] [INFO] : CACHE MISS: GET https://news.ycombinator.com/hn.js?Ug1GY3B6Kr5c7uonNem9
+[Time : 2026-07-03 10:20:10] [INFO] : CACHE MISS: GET https://news.ycombinator.com/s.gif
+[Time : 2026-07-03 10:20:10] [INFO] : Fetching from upstream: https://news.ycombinator.com/triangle.svg
+[Time : 2026-07-03 10:20:10] [INFO] : CACHE MISS: GET https://news.ycombinator.com/y18.svg
+[Time : 2026-07-03 10:20:11] [INFO] : CACHE MISS: GET https://news.ycombinator.com/triangle.svg
+[Time : 2026-07-03 10:23:09] [INFO] : Listening on port 8080
+[Time : 2026-07-03 10:23:18] [INFO] : [UPSTREAM FETCH] GET https://news.ycombinator.com/
+[Time : 2026-07-03 10:23:20] [INFO] : [CACHE MISS]     GET https://news.ycombinator.com/
+[Time : 2026-07-03 10:23:27] [INFO] : [UPSTREAM FETCH] GET https://news.ycombinator.com/news
+[Time : 2026-07-03 10:23:29] [INFO] : [CACHE MISS]     GET https://news.ycombinator.com/news
+[Time : 2026-07-03 10:23:33] [INFO] : [UPSTREAM FETCH] GET https://news.ycombinator.com/
+[Time : 2026-07-03 10:23:35] [INFO] : [CACHE MISS]     GET https://news.ycombinator.com/
+[Time : 2026-07-03 10:23:41] [INFO] : [UPSTREAM FETCH] GET https://news.ycombinator.com/news
+[Time : 2026-07-03 10:23:42] [INFO] : [CACHE MISS]     GET https://news.ycombinator.com/news
+[Time : 2026-07-03 10:23:43] [INFO] : [UPSTREAM FETCH] GET https://news.ycombinator.com/front
+[Time : 2026-07-03 10:23:45] [INFO] : [CACHE MISS]     GET https://news.ycombinator.com/front
+[Time : 2026-07-03 10:25:58] [INFO] : [UPSTREAM FETCH] GET https://news.ycombinator.com/news.css
+[Time : 2026-07-03 10:25:59] [INFO] : [CACHE MISS]     GET https://news.ycombinator.com/news.css
+[Time : 2026-07-03 10:25:59] [INFO] : [CACHE HIT]      GET https://news.ycombinator.com/news.css
+[Time : 2026-07-03 11:30:12] [INFO] : Listening on port 8080
+[Time : 2026-07-03 11:30:22] [INFO] : [UPSTREAM FETCH] POST https://jsonplaceholder.typicode.com/posts
+[Time : 2026-07-03 11:33:31] [INFO] : Listening on port 8080
+[Time : 2026-07-03 11:33:33] [INFO] : [UPSTREAM FETCH] POST https://jsonplaceholder.typicode.com/posts
+[Time : 2026-07-03 11:33:34] [WARNING] : [UPSTREAM ERROR]   POST https://jsonplaceholder.typicode.com/posts (Status: 201)
+[Time : 2026-07-03 11:38:29] [INFO] : Listening on port 8080
+[Time : 2026-07-03 11:38:48] [INFO] : [SERVER FETCH] POST https://jsonplaceholder.typicode.com/posts
+[Time : 2026-07-03 11:38:49] [INFO] : [SERVER SUCCESS] POST https://jsonplaceholder.typicode.com/posts (Status: 201)
+[Time : 2026-07-03 11:42:04] [INFO] : Listening on port 8080
+[Time : 2026-07-03 11:42:13] [INFO] : [SERVER FETCH]	POST https://jsonplaceholder.typicode.com/posts
+[Time : 2026-07-03 11:42:14] [INFO] : [SERVER SUCCESS]	POST https://jsonplaceholder.typicode.com/posts (Status: 201)
+[Time : 2026-07-03 11:43:10] [INFO] : Listening on port 8080
+[Time : 2026-07-03 11:45:41] [INFO] : Listening on port 8080
+[Time : 2026-07-03 17:18:00] [INFO] : Listening on port 8080

@@ -4,11 +4,11 @@ ThreadPool::ThreadPool(size_t threads) {
   stop = false;
   // Initialize worker threads, binding them to the internal workerLoop handler
   for (size_t i = 0; i < threads; i++) {
-    workers.emplace_back(&ThreadPool::workerLoop, this);
+    workers.emplace_back(&ThreadPool::worker_loop, this);
   }
 }
 
-void ThreadPool::enqueueTask(std::function<void()> task) {
+void ThreadPool::enqueue_task(std::function<void()> task) {
   {
     std::lock_guard<std::mutex> lock(queueMtx);
     // Ignore tasks if the thread pool is in shutdown mode
@@ -19,7 +19,7 @@ void ThreadPool::enqueueTask(std::function<void()> task) {
   cv.notify_one();
 }
 
-void ThreadPool::workerLoop() {
+void ThreadPool::worker_loop() {
   while (true) {
     std::function<void()> task;
     {
@@ -35,7 +35,6 @@ void ThreadPool::workerLoop() {
       task = std::move(taskQueue.front());
       taskQueue.pop();
     }
-    // Execute the task outside the lock to avoid blocking other worker threads
     if (task) {
       task();
     }

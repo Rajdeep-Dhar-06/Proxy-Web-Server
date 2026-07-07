@@ -23,21 +23,30 @@ set(SOCKPP_BUILD_TESTS OFF CACHE INTERNAL "")
 
 add_executable(caching-proxy
     src/main.cpp
+    config/config.cpp
+    src/logger/Logger.cpp
     src/concurrency/ThreadPool.cpp
     src/cache/LRUCache.cpp
     src/cache/ShardedCache.cpp
     src/network/Network.cpp
-    src/network/HTTPParser.cpp
     src/network/RequestCoalescer.cpp
     src/error/ErrorHandler.cpp
     src/vendor/picohttpparser.c
+    src/middleware/ParseHandler.cpp
+    src/middleware/CacheHandler.cpp
+    src/middleware/UpstreamHandler.cpp
+    src/utils/http_utils.cpp
 )
 
 # Specify the include directories
-target_include_directories(caching-proxy PRIVATE include src)
+target_include_directories(caching-proxy PRIVATE include src .)
 
 # Link threads library and sockpp
 find_package(Threads REQUIRED)
 target_link_libraries(caching-proxy PRIVATE Threads::Threads sockpp)
 find_package(OpenSSL REQUIRED)
 target_link_libraries(caching-proxy PRIVATE Threads::Threads sockpp OpenSSL::SSL OpenSSL::Crypto)
+target_compile_definitions(caching-proxy PRIVATE CPPHTTPLIB_OPENSSL_SUPPORT)
+
+
+

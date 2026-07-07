@@ -1,0 +1,18 @@
+version: "3.8"
+
+services:
+  proxy:
+    build: .
+    image: caching-proxy:latest
+    ports:
+      # Maps port 8080 on your host to 8080 in the container
+      - "8080:8080"
+    volumes:
+      # Persists the log file to your host machine automatically
+      - ./ProxyServerLog.log:/app/ProxyServerLog.log
+      # Sync container timezone with the host machine
+      - /etc/localtime:/etc/localtime:ro
+    environment:
+      - TZ=Asia/Kolkata
+    # Default startup command
+    command: --port 8080 --origin $ORIGIN
