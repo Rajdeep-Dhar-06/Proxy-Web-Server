@@ -15,7 +15,7 @@
 #include "network/Pipeline.hpp"
 #include "network/RequestCoalescer.hpp"
 
-ProxyServer::ProxyServer(uint16_t& port) : port(port), thread_pool(config.THREAD_COUNT) {
+ProxyServer::ProxyServer(uint16_t& port) : thread_pool(config.THREAD_COUNT), port(port) {
   cache = std::make_shared<ShardedCache>(config.CACHE_CAPACITY, config.SHARDS_COUNT);
   coalescer = std::make_shared<RequestCoalescer>();
   pipeline = std::make_shared<Pipeline>();

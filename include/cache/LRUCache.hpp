@@ -21,7 +21,7 @@ struct CacheNode {
 
   // Constructor
   CacheNode(const std::string& key, HttpResponse val, timepoint expires_at)
-      : key(key), response(std::move(val)), prev(), next(nullptr), expiration(expires_at) {}
+      : expiration(expires_at), prev(), next(nullptr), key(key), response(std::move(val)) {}
 };
 
 class LRUCache : public ICache {
