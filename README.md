@@ -175,6 +175,13 @@ cmake --build build
 ./build/caching-proxy --port 3000 --origin http://dummyjson.com
 ```
 
+#### Log Level Filtering
+You can control the server's logging verbosity using the `LOG_LEVEL` environment variable. Supported values are `DEBUG`, `INFO`, `WARNING`, and `ERROR` (defaults to `INFO`):
+```bash
+LOG_LEVEL=WARNING ./build/caching-proxy --port 8080 --origin http://localhost:9001
+```
+*Tip: Under heavy benchmark workloads (e.g., using `wrk`), setting `LOG_LEVEL=WARNING` or `LOG_LEVEL=ERROR` avoids logging bottlenecks and increases performance.*
+
 ---
 
 ## 🧪 Verification & API testing

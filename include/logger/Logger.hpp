@@ -26,8 +26,10 @@ class Logger {
   // Helpers
   std::string get_timestamp();
   std::string get_level(LoggerLevel level);
+  int get_severity(LoggerLevel level);
 
   // Members
   std::string filename;
   std::ofstream log_file;
+  LoggerLevel min_level = LoggerLevel::INFO;
 };

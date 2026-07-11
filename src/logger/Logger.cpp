@@ -6,7 +6,23 @@
 
 static std::mutex mtx;
 
-Logger::Logger() {}
+Logger::Logger() {
+  const char* level_env = std::getenv("LOG_LEVEL");
+  if (level_env) {
+    std::string s(level_env);
+    if (s == "DEBUG")
+      min_level = LoggerLevel::DEBUG;
+    else if (s == "INFO")
+      min_level = LoggerLevel::INFO;
+    else if (s == "WARNING")
+      min_level = LoggerLevel::WARNING;
+    else if (s == "ERROR")
+      min_level = LoggerLevel::ERROR;
+  } else {
+    min_level = LoggerLevel::INFO;
+  }
+}
+
 Logger::~Logger() {
   if (log_file.is_open()) {
     log_file.close();
@@ -31,6 +47,10 @@ void Logger::init(const std::string& f_name) {
 }
 
 void Logger::log(const std::string& message, LoggerLevel loggerLevel) {
+  if (get_severity(loggerLevel) < get_severity(min_level)) {
+    return;
+  }
+
   std::string curr_time = get_timestamp();
   std::string level = get_level(loggerLevel);
   std::string fullMessage = "[Time : " + curr_time + "] [" + level + "] : " + message;
@@ -65,5 +85,20 @@ std::string Logger::get_level(LoggerLevel level) {
       return "DEBUG";
     default:
       return "UNKNOWN";
+  }
+}
+
+int Logger::get_severity(LoggerLevel level) {
+  switch (level) {
+    case LoggerLevel::DEBUG:
+      return 0;
+    case LoggerLevel::INFO:
+      return 1;
+    case LoggerLevel::WARNING:
+      return 2;
+    case LoggerLevel::ERROR:
+      return 3;
+    default:
+      return 1;
   }
 }
