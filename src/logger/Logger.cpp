@@ -31,25 +31,25 @@ void Logger::init(const std::string& f_name) {
 }
 
 void Logger::log(const std::string& message, LoggerLevel loggerLevel) {
-  std::lock_guard<std::mutex> lock(mtx);
-
   std::string curr_time = get_timestamp();
   std::string level = get_level(loggerLevel);
-
   std::string fullMessage = "[Time : " + curr_time + "] [" + level + "] : " + message;
-  std::cout << "[" + curr_time + "] [" + level + "] " + message << std::endl;
+  std::string consoleMessage = "[" + curr_time + "] [" + level + "] " + message;
 
-  if (log_file.is_open()) {
-    log_file << fullMessage << std::endl;
-  }
+  // std::lock_guard<std::mutex> lock(mtx);
+  // std::cout << consoleMessage << '\n';
+  // if (log_file.is_open()) {
+  //   log_file << fullMessage << '\n';
+  // }
 }
 
 std::string Logger::get_timestamp() {
   std::time_t now = std::time(nullptr);
-  std::tm* localTime = std::localtime(&now);
+  struct tm timeinfo;
+  localtime_r(&now, &timeinfo);
 
   char buffer[20];
-  std::strftime(buffer, sizeof(buffer), "%Y-%m-%d %H:%M:%S", localTime);
+  std::strftime(buffer, sizeof(buffer), "%Y-%m-%d %H:%M:%S", &timeinfo);
   return std::string(buffer);
 }
 

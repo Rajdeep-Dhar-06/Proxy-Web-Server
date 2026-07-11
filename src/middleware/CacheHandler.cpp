@@ -7,27 +7,59 @@
 #include "network/HttpContext.hpp"
 #include "utils/http_utils.hpp"
 
+static bool has_identity(const HttpContext& ctx) {
+  return ctx.request.headers.count("authorization") > 0 || ctx.request.headers.count("cookie") > 0;
+}
+
+static bool is_explicitly_public(const HttpContext& ctx) {
+  auto it = ctx.response.headers.find("cache-control");
+  return it != ctx.response.headers.end() && it->second.find("public") != std::string::npos;
+}
+
 CacheHandler::CacheHandler(std::shared_ptr<ICache> cache, std::shared_ptr<RequestCoalescer> coalescer)
     : cache(std::move(cache)), coalescer(std::move(coalescer)) {}
 
 void CacheHandler::process(HttpContext& ctx) {
-  const std::string cache_key = ctx.request.host + ctx.request.path;
+  const std::string base_path = ctx.request.host + ctx.request.path;
 
-  if (ctx.request.method != "GET") {
-    Middleware::process(ctx);  // calls the next middleware module
+  bool is_cacheable_method = (ctx.request.method == "GET" || ctx.request.method == "HEAD");
 
+  if (!is_cacheable_method) {
+    // Forward mutations (POST, PUT, DELETE, etc.) directly to the backend
+    Middleware::process(ctx);
+
+    // If the mutation succeeded on the backend, we must aggressively purge
+    // the read-only representations of this resource to prevent stale data.
     if (ctx.response.status_code >= 200 && ctx.response.status_code < 300) {
-      cache->remove(cache_key);
+      cache->remove("GET:" + base_path);
+      cache->remove("HEAD:" + base_path);
     }
-
     return;
   }
 
+  const std::string cache_key = ctx.request.method + ":" + base_path;
+
+  if (has_identity(ctx)) {
+    Logger::get_instance().log("[SECURITY]\tIdentity detected. Bypassing cache for " + ctx.request.path, LoggerLevel::DEBUG);
+
+    Middleware::process(ctx);  // Fetch directly from backend
+
+    // Only cache if the origin cryptographically guarantees it is safe for everyone
+    if (is_explicitly_public(ctx) && ctx.response.ttl > 0) {
+      cache->put(cache_key, ctx.response, ctx.response.ttl);
+    }
+
+    ctx.response.headers["X-Cache"] = "BYPASS";
+    return;
+  }
+
+  // 4. Serve standard anonymous traffic
   if (respond_from_cache(ctx, cache_key, "HIT")) return;
 
+  // 5. Coalesce concurrent cache misses
   auto ticket = coalescer->start_or_join(cache_key);
   if (ticket.is_owner) {
-    handle_as_owner(ctx, cache_key);
+    handle_as_owner(ctx, cache_key);  // NOTE: Ensure handle_as_owner uses the modified cache_key
   } else {
     handle_as_waiter(ctx, cache_key, ticket);
   }

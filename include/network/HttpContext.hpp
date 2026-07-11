@@ -17,8 +17,8 @@ struct HttpResponse {
   // Members
   std::unordered_map<std::string, std::string> headers;
   std::string body;
-  int status_code;
-  int ttl;
+  int status_code = 0;
+  int ttl = 0;
   bool committed = false;
 };
 

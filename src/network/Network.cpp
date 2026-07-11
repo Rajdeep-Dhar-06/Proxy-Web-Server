@@ -25,7 +25,7 @@ ProxyServer::ProxyServer(uint16_t& port) : port(port), thread_pool(config.THREAD
 }
 
 void ProxyServer::run_server() {
-  sockpp::tcp_acceptor acceptor(port);  // socket() -> bind() -> listen()
+  sockpp::tcp_acceptor acceptor(port, 4096);  // socket() -> bind() -> listen()
   if (!acceptor) {
     Logger::get_instance().log("Failed to bind to port " + std::to_string(port) + ": " + acceptor.last_error_str(), LoggerLevel::ERROR);
     exit(EXIT_FAILURE);

@@ -11,22 +11,35 @@
 UpstreamHandler::UpstreamHandler(std::string origin_server) : origin(origin_server) {}
 
 void UpstreamHandler::process(HttpContext& ctx) {
+  auto init_backend = [this]() {
+    auto client = std::make_unique<httplib::Client>(origin);
+    client->set_keep_alive(true);
+    client->set_connection_timeout(config.CONNECT_TIMEOUT, 0);
+    client->set_read_timeout(config.READ_TIMEOUT, 0);
+    client->set_write_timeout(config.WRITE_TIMEOUT, 0);
+    client->set_follow_location(true);
+    client->enable_server_certificate_verification(false);
+    return client;
+  };
+
   // thread-local client persistent connection to backend origin
   thread_local std::unique_ptr<httplib::Client> backend = nullptr;
   if (!backend) {
-    backend = std::make_unique<httplib::Client>(origin);
-    backend->set_keep_alive(true);
-    backend->set_connection_timeout(config.CONNECT_TIMEOUT, 0);
-    backend->set_read_timeout(config.READ_TIMEOUT, 0);
-    backend->set_write_timeout(config.WRITE_TIMEOUT, 0);
-    backend->set_follow_location(true);
-    backend->enable_server_certificate_verification(false);
+    backend = init_backend();
   }
 
   // Adding headers
   httplib::Headers headers_to_send;
   for (const auto& [key, val] : ctx.request.headers) {
-    if (key == "host" || key == "content-length") continue;
+    std::string k = key;
+    std::transform(k.begin(), k.end(), k.begin(), ::tolower);
+
+    // RFC 7230 Hop-by-hop headers that MUST NOT be forwarded
+    if (k == "host" || k == "content-length" || k == "connection" || k == "keep-alive" || k == "proxy-authenticate" ||
+        k == "proxy-authorization" || k == "proxy-connection" || k == "te" || k == "trailer" || k == "transfer-encoding" ||
+        k == "upgrade") {
+      continue;
+    }
     headers_to_send.insert({key, val});
   }
 
@@ -41,9 +54,26 @@ void UpstreamHandler::process(HttpContext& ctx) {
   auto res = backend->send(req);
 
   if (!res) {
-    Logger::get_instance().log("[BACKEND ERROR]\t" + ctx.request.method + " " + origin + ctx.request.path + " (Unreachable)",
+    bool is_idempotent =
+        (ctx.request.method == "GET" || ctx.request.method == "HEAD" || ctx.request.method == "PUT" || ctx.request.method == "DELETE");
+
+    bool failed_before_transmit = (res.error() == httplib::Error::Connection || res.error() == httplib::Error::ConnectionTimeout ||
+                                   res.error() == httplib::Error::Write);
+
+    if (is_idempotent || failed_before_transmit) {
+      Logger::get_instance().log("[STALE SOCKET]\tReconnecting to " + origin, LoggerLevel::DEBUG);
+      backend = nullptr;
+      backend = init_backend();
+      res = backend->send(req);
+    }
+  }
+
+  if (!res) {
+    std::string err_msg = httplib::to_string(res.error());
+    Logger::get_instance().log("[BACKEND ERROR]\t" + ctx.request.method + " " + origin + ctx.request.path + " (" + err_msg + ")",
                                LoggerLevel::ERROR);
-    throw ProxyException(502, "Bad Gateway", "Backend unreachable");
+
+    throw ProxyException(502, "Bad Gateway", err_msg);
   }
 
   if (res->status >= 100 && res->status < 200) {

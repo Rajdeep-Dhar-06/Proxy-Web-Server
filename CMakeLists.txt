@@ -48,5 +48,11 @@ find_package(OpenSSL REQUIRED)
 target_link_libraries(caching-proxy PRIVATE Threads::Threads sockpp OpenSSL::SSL OpenSSL::Crypto)
 target_compile_definitions(caching-proxy PRIVATE CPPHTTPLIB_OPENSSL_SUPPORT)
 
+# Mock origin target
+add_executable(mock-origin src/mock_origin.cpp include/vendor/httplib.h)
+target_include_directories(mock-origin PRIVATE include)
+target_link_libraries(mock-origin PRIVATE Threads::Threads)
+
+
 
 

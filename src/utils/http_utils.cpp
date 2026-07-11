@@ -219,6 +219,9 @@ void send_response(HttpContext& ctx) {
   if (ctx.response.committed) {
     return;
   }
+  ctx.response.headers.erase("Connection");
+  ctx.response.headers.erase("connection");
+  ctx.response.headers["Connection"] = "close";
   std::string raw_resp = serialize_response(ctx.response);
   ctx.socket.write_n(raw_resp.data(), raw_resp.size());
   ctx.response.committed = true;
