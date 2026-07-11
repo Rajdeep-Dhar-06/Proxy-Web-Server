@@ -225,3 +225,36 @@ When you modify a resource, the cache must be invalidated.
       -d '{"id": 1, "title": "Updated Title", "body": "fresh data", "userId": 1}'
     ```
 4.  Query `GET /posts/1` -> `[CACHE MISS]`. *(The cache was wiped when the PUT succeeded!)*
+
+### 4. Load Benchmarking with `wrk`
+
+You can perform high-concurrency benchmarks on the caching proxy using the [wrk](https://github.com/wg/wrk) HTTP benchmarking tool.
+
+#### Prerequisites
+Install `wrk` on Ubuntu/Debian:
+```bash
+sudo apt update && sudo apt install -y wrk
+```
+
+#### Step-by-Step Benchmarking
+
+1. **Start a simple origin server** on port `9001` (e.g. using Python's static server):
+   ```bash
+   mkdir -p /tmp/backend && echo "Hello from Origin!" > /tmp/backend/index.html
+   python3 -m http.server 9001 --directory /tmp/backend
+   ```
+
+2. **Start the Caching Proxy** targeting the origin:
+   ```bash
+   # Run with LOG_LEVEL=WARNING to prevent verbose logger lock bottlenecks during high concurrency
+   LOG_LEVEL=WARNING ./build/caching-proxy --port 8080 --origin http://localhost:9001
+   ```
+
+3. **Run the benchmark**:
+   Run `wrk` with multiple threads and connections:
+   ```bash
+   # Benchmark with 12 threads and 400 connections over 30 seconds
+   wrk -t12 -c400 -d30s -H "Connection: close" http://localhost:8080/index.html
+   ```
+   *Note: Using `-H "Connection: close"` is recommended under heavy simulated concurrency to ensure threads are recycled and returned to the thread pool, rather than being pinned to idle sockets.*
+
