@@ -36,11 +36,11 @@ void Logger::log(const std::string& message, LoggerLevel loggerLevel) {
   std::string fullMessage = "[Time : " + curr_time + "] [" + level + "] : " + message;
   std::string consoleMessage = "[" + curr_time + "] [" + level + "] " + message;
 
-  // std::lock_guard<std::mutex> lock(mtx);
-  // std::cout << consoleMessage << '\n';
-  // if (log_file.is_open()) {
-  //   log_file << fullMessage << '\n';
-  // }
+  std::lock_guard<std::mutex> lock(mtx);
+  std::cout << consoleMessage << '\n';
+  if (log_file.is_open()) {
+    log_file << fullMessage << '\n';
+  }
 }
 
 std::string Logger::get_timestamp() {

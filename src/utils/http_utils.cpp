@@ -16,7 +16,7 @@ namespace http {
 
 // Reads from the socket until the complete HTTP request line and headers are received
 static size_t read_header_block(sockpp::tcp_socket& socket, std::vector<char>& buffer, const char** method, size_t* method_len,
-                                const char** path, size_t* path_len, struct phr_header* headers, size_t* num_headers) {
+                                const char** path, size_t* path_len, struct phr_header* headers, size_t* num_headers, int* minor_version_out) {
   size_t prevbuflen = 0;
   int minor_version;
 
@@ -34,6 +34,7 @@ static size_t read_header_block(sockpp::tcp_socket& socket, std::vector<char>& b
                                 prevbuflen);
 
     if (res > 0) {
+      *minor_version_out = minor_version;
       return static_cast<size_t>(res);  // Return header block length
     } else if (res == -1) {
       throw ProxyException(400, "Bad Request", "Malformed HTTP request headers");
@@ -126,12 +127,14 @@ void read_and_parse_request(HttpContext& ctx) {
   size_t path_len;
   struct phr_header headers[100];
   size_t num_headers = sizeof(headers) / sizeof(headers[0]);
+  int minor_version = 1;
 
   // 1. Read and parse HTTP Request Line + Headers
-  size_t header_len = read_header_block(ctx.socket, req_buf, &method, &method_len, &path, &path_len, headers, &num_headers);
+  size_t header_len = read_header_block(ctx.socket, req_buf, &method, &method_len, &path, &path_len, headers, &num_headers, &minor_version);
 
   ctx.request.method = std::string(method, method_len);
   ctx.request.path = std::string(path, path_len);
+  ctx.request.http_minor = minor_version;
 
   // 2. Extract headers, Host, and Content-Length
   std::string host = "";
@@ -221,10 +224,21 @@ void send_response(HttpContext& ctx) {
   }
   ctx.response.headers.erase("Connection");
   ctx.response.headers.erase("connection");
-  ctx.response.headers["Connection"] = "close";
+  ctx.response.headers["Connection"] = ctx.keep_alive ? "keep-alive" : "close";
   std::string raw_resp = serialize_response(ctx.response);
   ctx.socket.write_n(raw_resp.data(), raw_resp.size());
   ctx.response.committed = true;
+}
+
+bool wants_keep_alive(const HttpRequest& req) {
+  auto it = req.headers.find("connection");
+  if (it != req.headers.end()) {
+    std::string v = it->second;
+    std::transform(v.begin(), v.end(), v.begin(), [](unsigned char c) { return std::tolower(c); });
+    if (v.find("close") != std::string::npos) return false;
+    if (v.find("keep-alive") != std::string::npos) return true;
+  }
+  return req.http_minor >= 1;  // HTTP/1.1 defaults to keep-alive, HTTP/1.0 defaults to close
 }
 
 }  // namespace http

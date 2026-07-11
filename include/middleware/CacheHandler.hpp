@@ -16,9 +16,9 @@ class CacheHandler : public Middleware {
 
  private:
   // Helpers
-  bool respond_from_cache(HttpContext& ctx, const std::string& key, const char* hit_label);
+  bool respond_from_cache(HttpContext& ctx, const std::string& key);
   void handle_as_owner(HttpContext& ctx, const std::string& key);
-  void handle_as_waiter(HttpContext& ctx, const std::string& key, RequestCoalescer::Ticket& ticket);
+  void handle_as_waiter(HttpContext& ctx, RequestCoalescer::Ticket& ticket);
 
   // Members
   std::shared_ptr<ICache> cache;

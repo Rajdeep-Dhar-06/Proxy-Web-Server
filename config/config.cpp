@@ -37,6 +37,12 @@ Config Config::from_env() {
   if (const char* max_cacheable_env = std::getenv("MAX_CACHEABLE")) {
     cfg.MAX_CACHEABLE = std::stoull(max_cacheable_env);
   }
+  if (const char* max_req_conn_env = std::getenv("MAX_REQUESTS_PER_CONNECTION")) {
+    cfg.MAX_REQUESTS_PER_CONNECTION = std::stoi(max_req_conn_env);
+  }
+  if (const char* idle_to_env = std::getenv("KEEPALIVE_IDLE_TIMEOUT")) {
+    cfg.KEEPALIVE_IDLE_TIMEOUT = std::stoi(idle_to_env);
+  }
   return cfg;
 }
 

@@ -67,6 +67,7 @@ std::optional<HttpResponse> LRUCache::get(const std::string& key) {
     if (now >= foundNode->expiration) {
       remove_node(foundNode);
       cacheMap.erase(key);
+      size--;
       return std::nullopt;
     }
 

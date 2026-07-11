@@ -1,3 +1,4 @@
+#pragma once
 #include <fstream>
 #include <string>
 enum class LoggerLevel { INFO, WARNING, DEBUG, ERROR };

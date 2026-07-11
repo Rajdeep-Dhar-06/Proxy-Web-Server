@@ -54,18 +54,18 @@ void CacheHandler::process(HttpContext& ctx) {
   }
 
   // 4. Serve standard anonymous traffic
-  if (respond_from_cache(ctx, cache_key, "HIT")) return;
+  if (respond_from_cache(ctx, cache_key)) return;
 
   // 5. Coalesce concurrent cache misses
   auto ticket = coalescer->start_or_join(cache_key);
   if (ticket.is_owner) {
     handle_as_owner(ctx, cache_key);  // NOTE: Ensure handle_as_owner uses the modified cache_key
   } else {
-    handle_as_waiter(ctx, cache_key, ticket);
+    handle_as_waiter(ctx, ticket);
   }
 }
 
-bool CacheHandler::respond_from_cache(HttpContext& ctx, const std::string& key, const char* hit_label) {
+bool CacheHandler::respond_from_cache(HttpContext& ctx, const std::string& key) {
   auto cached = cache->get(key);
   if (!cached.has_value()) return false;
 
@@ -77,7 +77,7 @@ bool CacheHandler::respond_from_cache(HttpContext& ctx, const std::string& key, 
 }
 
 void CacheHandler::handle_as_owner(HttpContext& ctx, const std::string& key) {
-  if (respond_from_cache(ctx, key, "HIT")) {
+  if (respond_from_cache(ctx, key)) {
     return;
   }
 
@@ -99,7 +99,7 @@ void CacheHandler::handle_as_owner(HttpContext& ctx, const std::string& key) {
   }
 }
 
-void CacheHandler::handle_as_waiter(HttpContext& ctx, const std::string& key, RequestCoalescer::Ticket& ticket) {
+void CacheHandler::handle_as_waiter(HttpContext& ctx, RequestCoalescer::Ticket& ticket) {
   std::shared_ptr<HttpResponse> result;
   try {
     result = ticket.done.get();  // rethrows whatever fail() set, if anything

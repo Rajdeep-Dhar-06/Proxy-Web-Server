@@ -40,6 +40,8 @@ void ProxyServer::run_server() {
       continue;
     }
 
+    client.read_timeout(std::chrono::seconds(config.KEEPALIVE_IDLE_TIMEOUT));
+
     // Moves the socket allocation from stack to heap to survive the async task
     auto socket_ptr = std::make_shared<sockpp::tcp_socket>(std::move(client));
     thread_pool.enqueue_task([socket_ptr, pipeline = pipeline]() {

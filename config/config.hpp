@@ -21,6 +21,8 @@ struct Config {
   int WRITE_TIMEOUT = 2;
   int MAX_HEADER_BYTES = 8192;
   size_t MAX_CACHEABLE = 5 * 1024 * 1024;  // 5MB default
+  int MAX_REQUESTS_PER_CONNECTION = 100;
+  int KEEPALIVE_IDLE_TIMEOUT = 10;  // seconds
 
   static Config from_env();
 };

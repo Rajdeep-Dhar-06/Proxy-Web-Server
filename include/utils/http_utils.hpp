@@ -28,4 +28,7 @@ std::string serialize_response(HttpResponse& response);
 // Sends the response in HttpContext back to the client socket and marks it committed
 void send_response(HttpContext& ctx);
 
+// Checks if the request requests a persistent keep-alive connection
+bool wants_keep_alive(const HttpRequest& req);
+
 }  // namespace http

@@ -11,6 +11,7 @@ struct HttpRequest {
   std::string host;
   std::unordered_map<std::string, std::string> headers;
   std::string body;
+  int http_minor = 1;
 };
 
 struct HttpResponse {
@@ -34,4 +35,5 @@ class HttpContext {
 
   // Shared state flags for middleware coordination
   bool skip_cache = false;
+  bool keep_alive = false;
 };
