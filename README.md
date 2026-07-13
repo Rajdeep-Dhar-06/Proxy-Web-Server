@@ -32,6 +32,7 @@ graph TD
     UpstreamHandler2 --> Invalidate[CacheHandler: Invalidate Stale Cache Key]
     Invalidate --> Client
 ```
+<img width="1440" height="1080" alt="image" src="https://github.com/user-attachments/assets/d9bc2e94-3901-4f6b-9b14-9412b558fa4a" />
 
 ### 📋 Architectural & System Design Patterns
 
