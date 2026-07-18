@@ -1,6 +1,6 @@
-# C++17 Caching Reverse Proxy Server
+# High-Performance Caching Reverse Proxy Server
 
-A multi-threaded Caching Reverse Proxy Server implemented in C++17. Designed as an intermediate gateway, this server intercepts client HTTP/1.1 requests, inspects a thread-safe Sharded LRU Cache to serve cached responses instantly, coalesces concurrent requests targeting the same upstream resource to mitigate backend stampede, and dynamically routes cache misses to secure HTTPS or plain HTTP target origins.
+A multi-threaded Caching Reverse Proxy Server. Designed as an intermediate gateway, this server intercepts client HTTP/1.1 requests, inspects a thread-safe Sharded LRU Cache to serve cached responses instantly, coalesces concurrent requests targeting the same upstream resource to mitigate backend stampede, and dynamically routes cache misses to secure HTTPS or plain HTTP target origins.
 
 ---
 
@@ -17,10 +17,10 @@ graph TD
     CacheLook -- Yes (HIT) --> RespondCache[Serve from Cache] --> Client
     CacheLook -- No (MISS) --> HerdCheck{Active In-flight Fetch?}
     
-    HerdCheck -- Yes (Join) --> Coalesce[Coalesce: Block on std::shared_future]
+    HerdCheck -- Yes (Join) --> Coalesce[Coalesce: Block on shared future]
     Coalesce --> ResolveWaiter[Serve same response once finished] --> Client
     
-    HerdCheck -- No (Fetch) --> UpstreamHandler[UpstreamHandler: Dynamic forward via cpp-httplib]
+    HerdCheck -- No (Fetch) --> UpstreamHandler[UpstreamHandler: Dynamic forward via HTTP client]
     UpstreamHandler --> Upstream[(Upstream Target Origin)]
     Upstream --> UpstreamHandler
     UpstreamHandler --> CacheHandler
@@ -46,9 +46,9 @@ graph TD
 | **Singleton** | [`Logger`](file:///home/rajdeep/proxyserver/caching-proxy/src/logger/Logger.cpp) | Ensures a single globally accessible logging instance across the multithreaded server to coordinate safe concurrent writes to the file stream. |
 | **Thread Pool** | [`ThreadPool`](file:///home/rajdeep/proxyserver/caching-proxy/src/concurrency/ThreadPool.cpp) | Manages a fixed size worker pool to queue and execute client socket connections, avoiding thread creation overhead and system exhaustion. |
 | **Cache Sharding (Data Partitioning)** | [`ShardedCache`](file:///home/rajdeep/proxyserver/caching-proxy/src/cache/ShardedCache.cpp) | Splits the cache into 12 distinct shards and hashes key routes to prevent global lock contention in multithreaded readers/writers. |
-| **Request Coalescing (Future/Promise)** | [`RequestCoalescer`](file:///home/rajdeep/proxyserver/caching-proxy/src/network/RequestCoalescer.cpp) | Dedupes concurrent uncached hits (thundering herd protection) by letting the first thread retrieve data while others block on a `std::shared_future`. |
-| **Observer (Publish-Subscribe)** | [`RequestCoalescer`](file:///home/rajdeep/proxyserver/caching-proxy/src/network/RequestCoalescer.cpp) | The coalescing waiters are notified and wake up as soon as the fetcher thread completes the `std::promise`, resolving the future response. |
-| **RAII (Resource Acquisition Is Initialization)** | `std::lock_guard` | Automatically handles mutex locking and unlocking via scope boundaries, ensuring zero deadlock conditions on exceptions or premature returns. |
+| **Request Coalescing (Future/Promise)** | [`RequestCoalescer`](file:///home/rajdeep/proxyserver/caching-proxy/src/network/RequestCoalescer.cpp) | Dedupes concurrent uncached hits (thundering herd protection) by letting the first thread retrieve data while others block on a shared asynchronous future. |
+| **Observer (Publish-Subscribe)** | [`RequestCoalescer`](file:///home/rajdeep/proxyserver/caching-proxy/src/network/RequestCoalescer.cpp) | The coalescing waiters are notified and wake up as soon as the fetcher thread completes the asynchronous promise, resolving the future response. |
+| **Automatic Resource Management** | Scoped Mutex Lock | Automatically handles mutex locking and unlocking via block scope boundaries, ensuring zero deadlock conditions on exceptions or premature returns. |
 
 ---
 
@@ -59,7 +59,7 @@ Instead of spawning a thread per TCP connection (which wastes resources and adds
 A single global cache guarded by a single mutex is a major bottleneck under high concurrency. To mitigate lock contention, the cache is partitioned into **12 independent shards**. Requests are routed to a specific shard using the hash of their URL key, enabling concurrent threads to read and write without blocking each other.
 
 ### 3. Thundering Herd Protection (`RequestCoalescer`)
-To prevent cache stampedes (when multiple clients request an uncached resource simultaneously), the proxy implements **Request Coalescing**. Using C++17 `std::promise` and `std::shared_future`, only the first request (the owner) fetches from the backend. Concurrent waiters block on the shared future and are served the response directly from memory once the owner completes, shielding the backend server.
+To prevent cache stampedes (when multiple clients request an uncached resource simultaneously), the proxy implements **Request Coalescing**. Using asynchronous promise and future primitives, only the first request (the owner) fetches from the backend. Concurrent waiters block on the shared future and are served the response directly from memory once the owner completes, shielding the backend server.
 
 ### 4. Zero-Copy Incremental Stream Parsing (`picohttpparser`)
 HTTP headers may arrive fragmented across network packets. The server utilizes `picohttpparser` in an incremental socket-reading loop to correctly handle partial packet header fragmentation with zero-copy speeds.
@@ -105,7 +105,7 @@ caching-proxy/
 │   ├── utils/
 │   │   └── http_utils.hpp      # HTTP serialization, normalizing, and parsing
 │   └── vendor/                 # Embedded dependencies
-│       ├── httplib.h           # cpp-httplib client
+│       ├── httplib.h           # HTTP client library
 │       └── picohttpparser.h    # picohttpparser C library
 └── src/                        # Implementations
     ├── cache/
@@ -155,7 +155,7 @@ Docker Compose is the simplest way to run the proxy. It automatically compiles t
 
 ## 🛠️ Building & Running Locally
 
-If you prefer building on your local machine (outside of Docker), ensure you have a C++17 compiler, CMake, and OpenSSL libraries.
+If you prefer building on your local machine (outside of Docker), ensure you have a modern compiler, CMake, and OpenSSL libraries.
 
 ### Prerequisites (Ubuntu/Debian)
 ```bash
@@ -215,7 +215,7 @@ Send a write request with custom client headers and a JSON body. The proxy will 
 curl -i -X POST http://localhost:8080/posts \
   -H "Content-Type: application/json" \
   -H "X-Custom-Client-Header: Hello" \
-  -d '{"title": "C++ Caching Proxy", "body": "check", "userId": 1}'
+  -d '{"title": "Caching Proxy", "body": "check", "userId": 1}'
 ```
 
 ### 3. PUT Cache Invalidation
@@ -262,4 +262,22 @@ sudo apt update && sudo apt install -y wrk
    wrk -t12 -c400 -d30s -H "Connection: close" http://localhost:8080/index.html
    ```
    *Note: Using `-H "Connection: close"` is recommended under heavy simulated concurrency to ensure threads are recycled and returned to the thread pool, rather than being pinned to idle sockets.*
+
+---
+
+### 5. Running Automated Unit Tests
+
+The proxy comes with a comprehensive suite of automated tests verifying the LRU cache, cache sharding, request coalescing, and request parsing.
+
+To run the test suite:
+1. **Configure and Build** the project locally (outside of Docker):
+   ```bash
+   cmake -B build -S .
+   cmake --build build
+   ```
+2. **Execute the tests**:
+   ```bash
+   ./build/tests/run_tests
+   ```
+*(Note: These tests are also automatically executed during the Docker build stage to validate code correctness before packaging).*
 
