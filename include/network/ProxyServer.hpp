@@ -12,7 +12,7 @@
 class ProxyServer {
  public:
   // Constructor and destructor
-  ProxyServer(uint16_t& port);
+  ProxyServer(uint16_t& server_port);
   ~ProxyServer() = default;
 
   // Delete copy operations

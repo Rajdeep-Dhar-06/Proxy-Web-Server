@@ -1,72 +1,69 @@
 #include "../include/logger/Logger.hpp"
 
-#include <fstream>
+#include <cstdlib>
 #include <iostream>
-#include <mutex>
 
-static std::mutex mtx;
-
-Logger::Logger() {
-  const char* level_env = std::getenv("LOG_LEVEL");
-  if (level_env) {
-    std::string s(level_env);
-    if (s == "DEBUG")
-      min_level = LoggerLevel::DEBUG;
-    else if (s == "INFO")
-      min_level = LoggerLevel::INFO;
-    else if (s == "WARNING")
-      min_level = LoggerLevel::WARNING;
-    else if (s == "ERROR")
-      min_level = LoggerLevel::ERROR;
-  } else {
-    min_level = LoggerLevel::INFO;
-  }
-}
+Logger::Logger() { printer = std::thread(&Logger::process_queue, this); }
 
 Logger::~Logger() {
+  log_queue.stop();
+
+  if (printer.joinable()) {
+    printer.join();
+  }
+
   if (log_file.is_open()) {
     log_file.close();
   }
 }
 
 Logger& Logger::get_instance() {
-  // Thread safe creation, local static initialisation
   static Logger instance;
   return instance;
 }
 
 void Logger::init(const std::string& f_name) {
-  std::lock_guard<std::mutex> lock(mtx);
-
   if (log_file.is_open()) {
     return;
   }
 
-  filename = std::move(f_name);
+  filename = f_name;
   log_file.open(filename, std::ios::app);
 }
 
 void Logger::log(const std::string& message, LoggerLevel loggerLevel) {
-  if (get_severity(loggerLevel) < get_severity(min_level)) {
-    return;
-  }
+  LogEntry entry;
+  entry.level = loggerLevel;
+  entry.timestamp = std::time(nullptr);
+  entry.message = message;
 
-  std::string curr_time = get_timestamp();
-  std::string level = get_level(loggerLevel);
-  std::string fullMessage = "[Time : " + curr_time + "] [" + level + "] : " + message;
-  std::string consoleMessage = "[" + curr_time + "] [" + level + "] " + message;
+  log_queue.push(std::move(entry));
+}
 
-  std::lock_guard<std::mutex> lock(mtx);
-  std::cout << consoleMessage << '\n';
-  if (log_file.is_open()) {
-    log_file << fullMessage << '\n';
+void Logger::process_queue() {
+  while (true) {
+    auto entry = log_queue.pop();
+
+    if (!entry.has_value()) {
+      return;
+    }
+
+    std::string curr_time = get_timestamp(entry->timestamp);
+    std::string level = get_level(entry->level);
+
+    std::string fullMessage = "[Time : " + curr_time + "] [" + level + "] : " + entry->message;
+    std::string consoleMessage = "[" + curr_time + "] [" + level + "] " + entry->message;
+
+    std::cout << consoleMessage << '\n';
+    if (log_file.is_open()) {
+      log_file << fullMessage << '\n';
+    }
   }
 }
 
-std::string Logger::get_timestamp() {
-  std::time_t now = std::time(nullptr);
+std::string Logger::get_timestamp(std::time_t raw_time) {
   struct tm timeinfo;
-  localtime_r(&now, &timeinfo);
+  localtime_r(&raw_time, &timeinfo);
 
   char buffer[20];
   std::strftime(buffer, sizeof(buffer), "%Y-%m-%d %H:%M:%S", &timeinfo);
@@ -85,20 +82,5 @@ std::string Logger::get_level(LoggerLevel level) {
       return "DEBUG";
     default:
       return "UNKNOWN";
-  }
-}
-
-int Logger::get_severity(LoggerLevel level) {
-  switch (level) {
-    case LoggerLevel::DEBUG:
-      return 0;
-    case LoggerLevel::INFO:
-      return 1;
-    case LoggerLevel::WARNING:
-      return 2;
-    case LoggerLevel::ERROR:
-      return 3;
-    default:
-      return 1;
   }
 }

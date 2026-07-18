@@ -14,13 +14,13 @@ Config Config::from_env() {
     cfg.TTL = std::stoi(ttl_env);
   }
   if (const char* shards_env = std::getenv("SHARDS_COUNT")) {
-    cfg.SHARDS_COUNT = std::stoi(shards_env);
+    cfg.SHARDS_COUNT = static_cast<size_t>(std::stoi(shards_env));
   }
   if (const char* threads_env = std::getenv("THREAD_COUNT")) {
-    cfg.THREAD_COUNT = std::stoi(threads_env);
+    cfg.THREAD_COUNT = static_cast<size_t>(std::stoi(threads_env));
   }
   if (const char* cap_env = std::getenv("CACHE_CAPACITY")) {
-    cfg.CACHE_CAPACITY = std::stoi(cap_env);
+    cfg.CACHE_CAPACITY = static_cast<size_t>(std::stoi(cap_env));
   }
   if (const char* conn_to_env = std::getenv("CONNECT_TIMEOUT")) {
     cfg.CONNECT_TIMEOUT = std::stoi(conn_to_env);
@@ -38,7 +38,7 @@ Config Config::from_env() {
     cfg.MAX_CACHEABLE = std::stoull(max_cacheable_env);
   }
   if (const char* max_req_conn_env = std::getenv("MAX_REQUESTS_PER_CONNECTION")) {
-    cfg.MAX_REQUESTS_PER_CONNECTION = std::stoi(max_req_conn_env);
+    cfg.MAX_REQUESTS_PER_CONNECTION = static_cast<size_t>(std::stoi(max_req_conn_env));
   }
   if (const char* idle_to_env = std::getenv("KEEPALIVE_IDLE_TIMEOUT")) {
     cfg.KEEPALIVE_IDLE_TIMEOUT = std::stoi(idle_to_env);

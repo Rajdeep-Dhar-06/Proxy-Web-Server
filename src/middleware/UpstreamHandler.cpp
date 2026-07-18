@@ -8,7 +8,7 @@
 #include "utils/http_utils.hpp"
 #include "vendor/httplib.h"
 
-UpstreamHandler::UpstreamHandler(std::string origin_server) : origin(origin_server) {}
+UpstreamHandler::UpstreamHandler(std::string origin_server) : origin(std::move(origin_server)) {}
 
 void UpstreamHandler::process(HttpContext& ctx) {
   auto init_backend = [this]() {
@@ -31,13 +31,10 @@ void UpstreamHandler::process(HttpContext& ctx) {
   // Adding headers
   httplib::Headers headers_to_send;
   for (const auto& [key, val] : ctx.request.headers) {
-    std::string k = key;
-    std::transform(k.begin(), k.end(), k.begin(), ::tolower);
-
     // RFC 7230 Hop-by-hop headers that MUST NOT be forwarded
-    if (k == "host" || k == "content-length" || k == "connection" || k == "keep-alive" || k == "proxy-authenticate" ||
-        k == "proxy-authorization" || k == "proxy-connection" || k == "te" || k == "trailer" || k == "transfer-encoding" ||
-        k == "upgrade") {
+    if (key == "host" || key == "content-length" || key == "connection" || key == "keep-alive" || key == "proxy-authenticate" ||
+        key == "proxy-authorization" || key == "proxy-connection" || key == "te" || key == "trailer" || key == "transfer-encoding" ||
+        key == "upgrade") {
       continue;
     }
     headers_to_send.insert({key, val});
@@ -73,7 +70,7 @@ void UpstreamHandler::process(HttpContext& ctx) {
     Logger::get_instance().log("[BACKEND ERROR]\t" + ctx.request.method + " " + origin + ctx.request.path + " (" + err_msg + ")",
                                LoggerLevel::ERROR);
 
-    throw ProxyException(502, "Bad Gateway", err_msg);
+    throw ProxyException(502, err_msg);
   }
 
   if (res->status >= 100 && res->status < 200) {

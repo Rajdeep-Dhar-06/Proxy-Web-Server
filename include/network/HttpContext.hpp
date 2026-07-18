@@ -1,8 +1,9 @@
 #pragma once
-#include <sockpp/tcp_socket.h>
-
+#include <memory>
 #include <string>
 #include <unordered_map>
+
+#include "network/IConnection.hpp"
 
 struct HttpRequest {
   // Members
@@ -26,14 +27,17 @@ struct HttpResponse {
 class HttpContext {
  public:
   // Constructor
-  HttpContext(sockpp::tcp_socket& sock) : socket(sock) {}
+  explicit HttpContext(std::unique_ptr<IConnection> connection) : connection_(std::move(connection)) {}
 
   // Members
   HttpRequest request;
   HttpResponse response;
-  sockpp::tcp_socket& socket;
+
+  IConnection& connection() { return *connection_; }
 
   // Shared state flags for middleware coordination
-  bool skip_cache = false;
   bool keep_alive = false;
+
+ private:
+  std::unique_ptr<IConnection> connection_;
 };

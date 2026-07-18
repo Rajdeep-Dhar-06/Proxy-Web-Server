@@ -8,7 +8,7 @@
 class ShardedCache : public ICache {
  public:
   // Constructor
-  ShardedCache(int total_capacity, int shards_count);
+  ShardedCache(size_t total_capacity, size_t total_shards);
 
   // Cache operations
   std::optional<HttpResponse> get(const std::string& key) override;
@@ -17,10 +17,10 @@ class ShardedCache : public ICache {
 
  private:
   // Helpers
-  int get_shard_index(const std::string& key);
+  size_t get_shard_index(const std::string& key);
 
   // Members
   std::vector<std::unique_ptr<LRUCache>> shards;
   std::hash<std::string> hasher;
-  int num_shards;
+  size_t num_shards;
 };

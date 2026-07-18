@@ -17,12 +17,13 @@ WORKDIR /app
 COPY CMakeLists.txt .
 
 # Create dummy source files so CMake doesn't complain during configuration
-RUN mkdir -p src config src/logger src/concurrency src/cache src/network src/error src/vendor src/middleware src/utils && \
+RUN mkdir -p src config src/logger src/concurrency src/cache src/network src/error src/vendor src/middleware src/utils tests && \
+    touch tests/CMakeLists.txt && \
     touch src/main.cpp config/config.cpp src/logger/Logger.cpp src/concurrency/ThreadPool.cpp \
-          src/cache/LRUCache.cpp src/cache/ShardedCache.cpp src/network/Network.cpp \
-          src/network/RequestCoalescer.cpp src/error/ErrorHandler.cpp src/vendor/picohttpparser.c \
-          src/middleware/ParseHandler.cpp src/middleware/CacheHandler.cpp src/middleware/UpstreamHandler.cpp \
-          src/utils/http_utils.cpp
+          src/cache/LRUCache.cpp src/cache/ShardedCache.cpp src/network/ProxyServer.cpp \
+          src/network/SocketConnection.cpp src/network/RequestCoalescer.cpp src/error/ErrorHandler.cpp \
+          src/vendor/picohttpparser.c src/middleware/ParseHandler.cpp src/middleware/CacheHandler.cpp \
+          src/middleware/UpstreamHandler.cpp src/utils/http_utils.cpp
 
 # Configure and compile ONLY the external sockpp dependency
 RUN mkdir build && cd build && \

@@ -1,7 +1,19 @@
 #pragma once
+
+#include <ctime>
 #include <fstream>
 #include <string>
+#include <thread>
+
+#include "../structures/ThreadSafeQueue.hpp"
+
 enum class LoggerLevel { INFO, WARNING, DEBUG, ERROR };
+
+struct LogEntry {
+  LoggerLevel level;
+  std::time_t timestamp;
+  std::string message;
+};
 
 class Logger {
  public:
@@ -9,7 +21,7 @@ class Logger {
   static Logger& get_instance();
 
   // Add log file
-  void init(const std::string& filename = "ProxyServerLog.log");
+  void init(const std::string& filename);
 
   // Logging method
   void log(const std::string& message, LoggerLevel loggerlevel = LoggerLevel::INFO);
@@ -24,12 +36,16 @@ class Logger {
   Logger& operator=(const Logger&) = delete;
 
   // Helpers
-  std::string get_timestamp();
+  std::string get_timestamp(std::time_t raw_time);
   std::string get_level(LoggerLevel level);
-  int get_severity(LoggerLevel level);
+
+  void process_queue();
 
   // Members
   std::string filename;
   std::ofstream log_file;
-  LoggerLevel min_level = LoggerLevel::INFO;
+
+  // Concurrency primitives
+  ThreadSafeQueue<LogEntry> log_queue;
+  std::thread printer;
 };

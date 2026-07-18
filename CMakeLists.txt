@@ -28,7 +28,7 @@ add_executable(caching-proxy
     src/concurrency/ThreadPool.cpp
     src/cache/LRUCache.cpp
     src/cache/ShardedCache.cpp
-    src/network/Network.cpp
+    src/network/ProxyServer.cpp
     src/network/RequestCoalescer.cpp
     src/error/ErrorHandler.cpp
     src/vendor/picohttpparser.c
@@ -36,6 +36,7 @@ add_executable(caching-proxy
     src/middleware/CacheHandler.cpp
     src/middleware/UpstreamHandler.cpp
     src/utils/http_utils.cpp
+    src/network/SocketConnection.cpp
 )
 
 # Specify the include directories
@@ -47,4 +48,14 @@ target_link_libraries(caching-proxy PRIVATE Threads::Threads sockpp)
 find_package(OpenSSL REQUIRED)
 target_link_libraries(caching-proxy PRIVATE Threads::Threads sockpp OpenSSL::SSL OpenSSL::Crypto)
 target_compile_definitions(caching-proxy PRIVATE CPPHTTPLIB_OPENSSL_SUPPORT)
+
+option(ENABLE_TSAN "Enable ThreadSanitizer" OFF)
+if(ENABLE_TSAN)
+    target_compile_options(caching-proxy PRIVATE -fsanitize=thread -g -O1)
+    target_link_options(caching-proxy PRIVATE -fsanitize=thread)
+endif()
+
+enable_testing()
+add_subdirectory(tests)
+
 

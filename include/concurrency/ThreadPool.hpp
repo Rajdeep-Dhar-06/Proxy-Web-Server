@@ -1,25 +1,14 @@
-/**
- * @file ThreadPool.hpp
- * @brief Thread Pool implementation for executing asynchronous tasks.
- *
- * This file declares a fixed-size thread pool that maintains a queue of tasks.
- * Idle worker threads block on a condition variable until tasks are enqueued,
- * enabling concurrent execution of independent workloads.
- */
-
 #pragma once
-#include <atomic>
-#include <condition_variable>
 #include <functional>
-#include <mutex>
-#include <queue>
 #include <thread>
 #include <vector>
+
+#include "../structures/ThreadSafeQueue.hpp"
 
 class ThreadPool {
  public:
   // Constructor and destructor
-  ThreadPool(std::size_t threads = std::thread::hardware_concurrency() * 2);
+  ThreadPool(std::size_t threads);
   ~ThreadPool();
 
   // Task management
@@ -35,8 +24,5 @@ class ThreadPool {
 
   // Members
   std::vector<std::thread> workers;
-  std::queue<std::function<void()>> taskQueue;
-  std::mutex queueMtx;
-  std::condition_variable cv;
-  std::atomic<bool> stop;
+  ThreadSafeQueue<std::function<void()>> taskQueue;
 };

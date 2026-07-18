@@ -9,7 +9,7 @@
 class CacheHandler : public Middleware {
  public:
   // Constructor
-  CacheHandler(std::shared_ptr<ICache> cache, std::shared_ptr<RequestCoalescer> coalescer);
+  CacheHandler(std::shared_ptr<ICache> cache_strategy, std::shared_ptr<RequestCoalescer> coalescer_ptr);
 
   // Core processing
   void process(HttpContext& ctx) override;

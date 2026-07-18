@@ -7,29 +7,31 @@
 
 #include "config/config.hpp"
 #include "logger/Logger.hpp"
-#include "network/Network.hpp"
+#include "network/ProxyServer.hpp"
 
 using namespace std;
 
 bool is_valid_url(const string& url) {
+  // basic check for http/https prefix
   const regex url_regex(R"(^(https?)://[a-zA-Z0-9\-\.\:]+(/.*)?$)");
   return regex_match(url, url_regex);
 }
 
 int main(int argc, char* argv[]) {
-  Logger::get_instance().init();
-  sockpp::initialize();
+  Logger::get_instance().init("ProxyServerLog.log"); // start logging service
+  sockpp::initialize(); // start socket runtime environment
 
   if (argc != 5) {
     Logger::get_instance().log("Usage: caching-proxy --port <number> --origin <url>", LoggerLevel::ERROR);
     return 1;
   }
 
-  vector<string> args(argv, argv + argc);
+  vector<string> args(argv, argv + argc); // wrap arguments in vector
 
   int port = -1;
   string origin = "";
 
+  // loop through command line options
   for (size_t i = 1; i < args.size(); i++) {
     if (args[i] == "--port") {
       if (i + 1 >= args.size()) {
@@ -37,7 +39,7 @@ int main(int argc, char* argv[]) {
         return 1;
       }
       try {
-        port = stoi(args[i + 1]);
+        port = stoi(args[i + 1]); // convert port argument to integer
         if (port < 1 || port > 65535) {
           Logger::get_instance().log("Port must be between 1 and 65535.", LoggerLevel::ERROR);
           return 1;
@@ -71,10 +73,11 @@ int main(int argc, char* argv[]) {
   }
 
   if (port != -1) {
-    config.PORT = port;
+    config.PORT = static_cast<uint16_t>(port); // update port configuration
   }
+
   if (!origin.empty()) {
-    config.ORIGIN = origin;
+    config.ORIGIN = origin; // update origin target configuration
   }
 
   if (config.ORIGIN.empty()) {
@@ -95,11 +98,11 @@ int main(int argc, char* argv[]) {
     std::cout << "LRU cache online (" << config.CACHE_CAPACITY << " items / " << config.SHARDS_COUNT << " shards)\n";
     std::cout << "Thread pool initialized with " << config.THREAD_COUNT << " workers\n";
 
-    // Start server
+    // initialize and run proxy server
     ProxyServer server(config.PORT);
     server.run_server();
   } catch (const std::exception& e) {
-    Logger::get_instance().log("Proxy crashed: " + std::string(e.what()), LoggerLevel::ERROR);
+    Logger::get_instance().log("Proxy crashed: " + std::string(e.what()), LoggerLevel::ERROR); // log crash exception
     return 1;
   }
   return 0;

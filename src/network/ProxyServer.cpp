@@ -1,4 +1,4 @@
-#include "network/Network.hpp"
+#include "network/ProxyServer.hpp"
 
 #include <sockpp/tcp_acceptor.h>
 
@@ -14,8 +14,9 @@
 #include "network/HttpContext.hpp"
 #include "network/Pipeline.hpp"
 #include "network/RequestCoalescer.hpp"
+#include "network/SocketConnection.hpp"
 
-ProxyServer::ProxyServer(uint16_t& port) : thread_pool(config.THREAD_COUNT), port(port) {
+ProxyServer::ProxyServer(uint16_t& server_port) : thread_pool(config.THREAD_COUNT), port(server_port) {
   cache = std::make_shared<ShardedCache>(config.CACHE_CAPACITY, config.SHARDS_COUNT);
   coalescer = std::make_shared<RequestCoalescer>();
   pipeline = std::make_shared<Pipeline>();
@@ -46,7 +47,8 @@ void ProxyServer::run_server() {
     auto socket_ptr = std::make_shared<sockpp::tcp_socket>(std::move(client));
     thread_pool.enqueue_task([socket_ptr, pipeline = pipeline]() {
       try {
-        HttpContext ctx(*socket_ptr);
+        auto connection = std::make_unique<SocketConnection>(std::move(*socket_ptr));
+        HttpContext ctx(std::move(connection));
         pipeline->execute(ctx);
       } catch (const std::exception& e) {
         Logger::get_instance().log("Exception during client processing: " + std::string(e.what()), LoggerLevel::ERROR);

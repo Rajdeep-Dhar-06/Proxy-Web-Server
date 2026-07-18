@@ -11,3 +11,7 @@ proxy_test.log
 
 # IDE specific files
 .vscode/
+
+# Local test directory
+test_backend/
+

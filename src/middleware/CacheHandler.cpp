@@ -16,8 +16,8 @@ static bool is_explicitly_public(const HttpContext& ctx) {
   return it != ctx.response.headers.end() && it->second.find("public") != std::string::npos;
 }
 
-CacheHandler::CacheHandler(std::shared_ptr<ICache> cache, std::shared_ptr<RequestCoalescer> coalescer)
-    : cache(std::move(cache)), coalescer(std::move(coalescer)) {}
+CacheHandler::CacheHandler(std::shared_ptr<ICache> cache_strategy, std::shared_ptr<RequestCoalescer> coalescer_ptr)
+    : cache(std::move(cache_strategy)), coalescer(std::move(coalescer_ptr)) {}
 
 void CacheHandler::process(HttpContext& ctx) {
   const std::string base_path = ctx.request.host + ctx.request.path;
@@ -25,11 +25,9 @@ void CacheHandler::process(HttpContext& ctx) {
   bool is_cacheable_method = (ctx.request.method == "GET" || ctx.request.method == "HEAD");
 
   if (!is_cacheable_method) {
-    // Forward mutations (POST, PUT, DELETE, etc.) directly to the backend
+    // Forward mutations (POST, PUT, DELETE, etc) directly to the backend
     Middleware::process(ctx);
 
-    // If the mutation succeeded on the backend, we must aggressively purge
-    // the read-only representations of this resource to prevent stale data.
     if (ctx.response.status_code >= 200 && ctx.response.status_code < 300) {
       cache->remove("GET:" + base_path);
       cache->remove("HEAD:" + base_path);
@@ -44,8 +42,7 @@ void CacheHandler::process(HttpContext& ctx) {
 
     Middleware::process(ctx);  // Fetch directly from backend
 
-    // Only cache if the origin cryptographically guarantees it is safe for everyone
-    if (is_explicitly_public(ctx) && ctx.response.ttl > 0) {
+    if (is_explicitly_public(ctx) && ctx.response.ttl > 0) { // cache if public and ttl greater than 0
       cache->put(cache_key, ctx.response, ctx.response.ttl);
     }
 
@@ -53,13 +50,13 @@ void CacheHandler::process(HttpContext& ctx) {
     return;
   }
 
-  // 4. Serve standard anonymous traffic
+  // Serve standard anonymous traffic
   if (respond_from_cache(ctx, cache_key)) return;
 
-  // 5. Coalesce concurrent cache misses
+  // Coalesce concurrent cache misses
   auto ticket = coalescer->start_or_join(cache_key);
   if (ticket.is_owner) {
-    handle_as_owner(ctx, cache_key);  // NOTE: Ensure handle_as_owner uses the modified cache_key
+    handle_as_owner(ctx, cache_key);
   } else {
     handle_as_waiter(ctx, ticket);
   }
@@ -77,6 +74,9 @@ bool CacheHandler::respond_from_cache(HttpContext& ctx, const std::string& key) 
 }
 
 void CacheHandler::handle_as_owner(HttpContext& ctx, const std::string& key) {
+  // Double-check the cache before fetching from backend. This guards against the race
+  // condition where a concurrent request has finished fetching and populated the cache
+  // in the window between our initial cache-miss check and joining the coalescer.
   if (respond_from_cache(ctx, key)) {
     return;
   }
@@ -91,8 +91,8 @@ void CacheHandler::handle_as_owner(HttpContext& ctx, const std::string& key) {
 
     Logger::get_instance().log("[CACHE MISS]\t" + ctx.request.method + " " + config.ORIGIN + ctx.request.path, LoggerLevel::INFO);
     ctx.response.headers["X-Cache"] = "MISS";
-    http::send_response(ctx);
     coalescer->complete(key, result);
+    http::send_response(ctx);
   } catch (...) {
     coalescer->fail(key, std::current_exception());
     throw;
@@ -106,7 +106,7 @@ void CacheHandler::handle_as_waiter(HttpContext& ctx, RequestCoalescer::Ticket& 
   } catch (const ProxyException&) {
     throw;
   } catch (const std::exception& e) {
-    throw ProxyException(502, "Bad Gateway", "Upstream request failed: " + std::string(e.what()));
+    throw ProxyException(502, "Upstream request failed: " + std::string(e.what()));
   }
 
   Logger::get_instance().log("[COALESCED HIT]\t" + ctx.request.method + " " + config.ORIGIN + ctx.request.path, LoggerLevel::INFO);

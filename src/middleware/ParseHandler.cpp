@@ -8,7 +8,7 @@
 #include "utils/http_utils.hpp"
 
 void ParseHandler::process(HttpContext& ctx) {
-  int requests_served = 0;
+  size_t requests_served = 0;
 
   while (true) {
     ctx.request = HttpRequest{};
@@ -16,8 +16,8 @@ void ParseHandler::process(HttpContext& ctx) {
 
     try {
       http::read_and_parse_request(ctx);
-    } catch (const SocketClosedException&) {
-      return;  // client closed, or the idle read timeout fired -- same handling either way
+    } catch (const SocketClosedException&) {  // client closed, or the idle read timeout fired -- same handling either way
+      return;
     } catch (const ProxyException& e) {
       ctx.keep_alive = false;
       e.populate_error_response(ctx.response);
@@ -26,7 +26,7 @@ void ParseHandler::process(HttpContext& ctx) {
     } catch (const std::exception& e) {
       Logger::get_instance().log("Malformed HTTP request: " + std::string(e.what()), LoggerLevel::WARNING);
       ctx.keep_alive = false;
-      ProxyException(400, "Bad Request", "Malformed HTTP request").populate_error_response(ctx.response);
+      ProxyException(400, "Malformed HTTP request").populate_error_response(ctx.response);
       http::send_response(ctx);
       return;
     }
@@ -43,7 +43,7 @@ void ParseHandler::process(HttpContext& ctx) {
     } catch (const std::exception& e) {
       Logger::get_instance().log("Unhandled exception: " + std::string(e.what()), LoggerLevel::ERROR);
       ctx.keep_alive = false;
-      ProxyException(500, "Internal Server Error", e.what()).populate_error_response(ctx.response);
+      ProxyException(500, e.what()).populate_error_response(ctx.response);
       http::send_response(ctx);
     }
 

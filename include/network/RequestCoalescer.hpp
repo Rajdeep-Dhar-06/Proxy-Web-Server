@@ -12,8 +12,8 @@ class RequestCoalescer {
  public:
   // Types
   struct Ticket {
-    bool is_owner;                                           ///< True if this thread must perform the request
-    std::shared_future<std::shared_ptr<HttpResponse>> done;  ///< Resolves to the owner's actual result
+    bool is_owner;
+    std::shared_future<std::shared_ptr<HttpResponse>> done;  // owner's result
   };
 
   // Coalescing management
@@ -29,6 +29,6 @@ class RequestCoalescer {
   };
 
   // Members
-  std::mutex mtx;                                              ///< Protects the in_flight map
-  std::unordered_map<std::string, InFlightRequest> in_flight;  ///< Maps URL to the active in-flight request
+  std::mutex mtx;
+  std::unordered_map<std::string, InFlightRequest> in_flight;
 };
